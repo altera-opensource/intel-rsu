@@ -1,0 +1,6 @@
+
+# This is the default rc file for test cases
+
+log med stderr
+
+root qspi /dev/mtd0

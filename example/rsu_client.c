@@ -13,15 +13,27 @@
  * COMMAND_
  */
 enum rsu_clinet_command_code {
-	COMMAND_ADD_IMAGE = 0,
+	COMMAND_NONE = 0,
+	COMMAND_SLOT_COUNT,
+	COMMAND_SLOT_ATTR,
+	COMMAND_SLOT_SIZE,
+	COMMAND_SLOT_PRIORITY,
+	COMMAND_SLOT_ENABLE,
+	COMMAND_SLOT_DISABLE,
+	COMMAND_SLOT_LOAD,
+	COMMAND_FACTORY_LOAD,
+	COMMAND_SLOT_ERASE,
+	COMMAND_ADD_IMAGE,
 	COMMAND_VERIFY_IMAGE,
-	COMMAND_COPY_TO_FILE
+	COMMAND_COPY_TO_FILE,
+	COMMAND_STATUS_LOG
 };
 
 static const struct option opts[] = {
 	{"count", no_argument, NULL, 'c'},
 	{"log", no_argument, NULL, 'g'},
 	{"help", no_argument, NULL, 'h'},
+	{"request-factory", no_argument, NULL, 'R'},
 	{"list", required_argument, NULL, 'l'},
 	{"size", required_argument, NULL, 'z'},
 	{"priority", required_argument, NULL, 'p'},
@@ -55,16 +67,18 @@ static void rsu_client_usage(void)
 	       "set the selected slot as the highest priority\n");
 	printf("%-32s  %s", "-D|--disable slot_num",
 	       "disable selected slot but to not erase it\n");
-	printf("%-32s  %s", "-a|--add file_name [-s|--slot] slot_num",
-	       "add a new app image to the selected slot, the default slot is 0 if user doesn't specify\n");
+	printf("%-32s  %s", "-r|--request slot_num",
+	       "request the selected slot to be loaded after the next reboot\n");
+	printf("%-32s  %s", "-R|--request-factory",
+	       "request the factory image to be loaded after the next reboot\n");
 	printf("%-32s  %s", "-e|--erase slot_num",
 	       "erase app image from the selected slot\n");
+	printf("%-32s  %s", "-a|--add file_name [-s|--slot] slot_num",
+	       "add a new app image to the selected slot, the default slot is 0 if user doesn't specify\n");
 	printf("%-32s  %s", "-v|--verify file_name [-s|--slot] slot_num",
 	       "verify app image on the selected slot, the default slot is 0 if user doesn't specify\n");
 	printf("%-32s  %s", "-f|--copy file_name -s|--slot slot_num",
 	       "read the data in a selected slot then write to a file\n");
-	printf("%-32s  %s", "-r|--request slot_num",
-	       "request the selected slot to be loaded after the next reboot\n");
 	printf("%-32s  %s", "-g|--log", "print the status log\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
@@ -124,6 +138,16 @@ static int rsu_client_copy_status_log(void)
 static int rsu_client_request_slot_be_loaded(int slot_num)
 {
 	return rsu_slot_load_after_reboot(slot_num);
+}
+
+/*
+ * rsu_client_request_factory_be_loaded() - Request the factory image be loaded
+ *
+ * Return: 0 on success, or negative value on error
+ */
+static int rsu_client_request_factory_be_loaded(void)
+{
+	return rsu_slot_load_factory_after_reboot();
 }
 
 /*
@@ -232,9 +256,9 @@ static int rsu_client_copy_to_file(char *file_name, int slot_num)
 	return rsu_slot_copy_to_file(slot_num, file_name);
 }
 
-static void error_handle(void)
+static void error_exit(char *msg)
 {
-	printf(" operation is failure\n");
+	printf("ERROR: %s\n", msg);
 	librsu_exit();
 	exit(1);
 }
@@ -243,11 +267,9 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int index = 0;
-	int slot_num_default = 0;
-	int slot_num;
-	enum rsu_clinet_command_code command;
-	char *filename;
-	int slot_info;
+	int slot_num = -1;
+	enum rsu_clinet_command_code command = COMMAND_NONE;
+	char *filename = NULL;
 	int ret;
 
 	if (argc == 1) {
@@ -262,106 +284,102 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghl:z:p:t:a:s:e:v:f:r:E:D:",
+				"cghRl:z:p:t:a:s:e:v:f:r:E:D:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
-			slot_info = rsu_client_get_slot_count();
-			printf("number of slots is %d\n", slot_info);
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_SLOT_COUNT;
 			break;
 		case 'l':
-			if (rsu_client_list_slot_attribute(atoi(optarg)))
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_ATTR;
+			slot_num = atoi(optarg);
 			break;
 		case 'z':
-			slot_info = rsu_client_get_slot_size(atoi(optarg));
-			printf("size of the selected slot is %d\n", slot_info);
-			if (slot_info == -1)
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_SIZE;
+			slot_num = atoi(optarg);
 			break;
 		case 'p':
-			slot_info = rsu_client_get_priority(atoi(optarg));
-			printf("priority of the selected slot is %d\n",
-			       slot_info);
-			if (slot_info == -1)
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_PRIORITY;
+			slot_num = atoi(optarg);
 			break;
 		case 'E':
-			if (rsu_slot_enable(atoi(optarg)))
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_ENABLE;
+			slot_num = atoi(optarg);
 			break;
 		case 'D':
-			if (rsu_slot_disable(atoi(optarg)))
-				error_handle();
-			break;
-		case 'a':
-			filename = optarg;
-			/*
-			 * if user doesn't specify the slot, then write image
-			 * to the default slot (slot = 0)
-			 */
-			if (argc == 3) {
-				if (rsu_client_add_app_image
-				    (filename, slot_num_default))
-					error_handle();
-			} else {
-				command = COMMAND_ADD_IMAGE;
-			}
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_DISABLE;
+			slot_num = atoi(optarg);
 			break;
 		case 'r':
-			if (rsu_client_request_slot_be_loaded(atoi(optarg)))
-				error_handle();
-			break;
-		case 's':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_LOAD;
 			slot_num = atoi(optarg);
-			switch (command) {
-			case COMMAND_ADD_IMAGE:
-				ret =
-				    rsu_client_add_app_image(filename,
-							     slot_num);
-				break;
-			case COMMAND_VERIFY_IMAGE:
-				ret =
-				    rsu_client_verify_data(filename, slot_num);
-				break;
-			case COMMAND_COPY_TO_FILE:
-				ret = rsu_client_copy_to_file(filename,
-							      slot_num);
-				break;
-			default:
-				break;
-			}
-
-			if (ret)
-				error_handle();
+			break;
+		case 'R':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_FACTORY_LOAD;
 			break;
 		case 'e':
-			if (rsu_client_erase_image(atoi(optarg)))
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_ERASE;
+			slot_num = atoi(optarg);
+			break;
+		case 's':
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			slot_num = atoi(optarg);
+			break;
+		case 'a':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_ADD_IMAGE;
+			filename = optarg;
 			break;
 		case 'v':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_VERIFY_IMAGE;
 			filename = optarg;
-			/* if user doesn't specify the slot */
-			if (argc == 3) {
-				if (rsu_client_verify_data
-				    (filename, slot_num_default))
-					error_handle();
-			} else {
-				command = COMMAND_VERIFY_IMAGE;
-			}
 			break;
 		case 'f':
-			if (argc == 3) {
-				rsu_client_usage();
-				exit(1);
-			}
-
-			filename = optarg;
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
 			command = COMMAND_COPY_TO_FILE;
+			filename = optarg;
 			break;
 		case 'g':
-			if (rsu_client_copy_status_log())
-				error_handle();
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_STATUS_LOG;
 			break;
 		case 'h':
 			rsu_client_usage();
@@ -369,10 +387,91 @@ int main(int argc, char *argv[])
 			exit(0);
 
 		default:
-			rsu_client_usage();
-			librsu_exit();
-			exit(1);
+			error_exit("Invalid argument: try -h for help");
 		}
+	}
+
+	switch (command) {
+	case COMMAND_SLOT_COUNT:
+		if (slot_num >= 0)
+			error_exit("Slot number should not be set");
+		ret = rsu_client_get_slot_count();
+		if (ret < 0)
+			error_exit("Failed to get number of slots");
+		printf("number of slots is %d\n", ret);
+		break;
+	case COMMAND_SLOT_ATTR:
+		ret = rsu_client_list_slot_attribute(slot_num);
+		if (ret)
+			error_exit("Failed to get slot attributes");
+		break;
+	case COMMAND_SLOT_SIZE:
+		ret = rsu_client_get_slot_size(slot_num);
+		if (ret < 0)
+			error_exit("Failed to get slot size");
+		printf("size of slot %d is %d\n", slot_num, ret);
+		break;
+	case COMMAND_SLOT_PRIORITY:
+		ret = rsu_client_get_priority(slot_num);
+		if (ret < 0)
+			error_exit("Failed to get slot priority");
+		printf("priority of slot %d is %d\n", slot_num, ret);
+		break;
+	case COMMAND_SLOT_ENABLE:
+		if (rsu_slot_enable(slot_num))
+			error_exit("Failed to enable slot");
+		break;
+	case COMMAND_SLOT_DISABLE:
+		if (rsu_slot_disable(slot_num))
+			error_exit("Failed to disable slot");
+		break;
+	case COMMAND_SLOT_LOAD:
+		ret = rsu_client_request_slot_be_loaded(slot_num);
+		if (ret)
+			error_exit("Failed to request slot loaded");
+		break;
+	case COMMAND_FACTORY_LOAD:
+		if (slot_num >= 0)
+			error_exit("Slot number should not be set");
+		ret = rsu_client_request_factory_be_loaded();
+		if (ret)
+			error_exit("Failed to request factory image load");
+		break;
+	case COMMAND_SLOT_ERASE:
+		ret = rsu_client_erase_image(slot_num);
+		if (ret)
+			error_exit("Failed to erase slot");
+		break;
+	case COMMAND_ADD_IMAGE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_add_app_image(filename, slot_num);
+		if (ret < 0)
+			error_exit("Failed to add application image");
+		break;
+	case COMMAND_VERIFY_IMAGE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_verify_data(filename, slot_num);
+		if (ret < 0)
+			error_exit("Failed to verify application image");
+		break;
+	case COMMAND_COPY_TO_FILE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_copy_to_file(filename, slot_num);
+		if (ret < 0)
+			error_exit("Failed to copy app image to file");
+		break;
+	case COMMAND_STATUS_LOG:
+		if (slot_num >= 0)
+			error_exit("Slot number should not be set");
+		ret = rsu_client_copy_status_log();
+		if (ret)
+			error_exit("Failed to read status log");
+		break;
+	default:
+		error_exit("No command: try -h for help");
 	}
 
 	printf("Operation completed\n");

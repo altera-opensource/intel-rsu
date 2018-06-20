@@ -204,6 +204,17 @@ int rsu_slot_disable(int slot);
 int rsu_slot_load_after_reboot(int slot);
 
 /*
+ * rsu_slot_load_factory_after_reboot() - Request that the factory image be
+ *                                        loaded after the next reboot. A
+ *                                        power-on reset will ignore this
+ *                                        request and use slot priority to
+ *                                        select the first slot.
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_load_factory_after_reboot(void);
+
+/*
  * rsu_slot_rename() - Rename the selected slot.
  * slot: slot number
  * name: new name for slot

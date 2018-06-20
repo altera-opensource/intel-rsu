@@ -563,7 +563,7 @@ int rsu_slot_enable(int slot)
 int rsu_slot_load_after_reboot(int slot)
 {
 	int part_num;
-	struct rsu_slot_info info;
+	__u64 offset;
 
 	if (!ll_intf)
 		return -ELIB;
@@ -572,10 +572,7 @@ int rsu_slot_load_after_reboot(int slot)
 	if (part_num < 0)
 		return -ESLOTNUM;
 
-	if (rsu_slot_get_info(slot, &info)) {
-		librsu_log(HIGH, __func__, "Unable to read slot info");
-		return -ESLOTNUM;
-	}
+	offset = ll_intf->partition.offset(part_num);
 
 	if (ll_intf->priority.get(part_num) <= 0) {
 		librsu_log(HIGH, __func__,
@@ -583,7 +580,37 @@ int rsu_slot_load_after_reboot(int slot)
 		return -EERASE;
 	}
 
-	if (librsu_misc_put_devattr("reboot_image", info.offset))
+	if (librsu_misc_put_devattr("reboot_image", offset))
+		return -EFILEIO;
+
+	return 0;
+}
+
+int rsu_slot_load_factory_after_reboot(void)
+{
+	int part_num;
+	int partitions;
+	__u64 offset;
+	char name[] = "FACTORY_IMAGE";
+
+	if (!ll_intf)
+		return -ELIB;
+
+	partitions = ll_intf->partition.count();
+
+	for (part_num = 0; part_num < partitions; part_num++) {
+		if (!strcmp(name, ll_intf->partition.name(part_num)))
+			break;
+	}
+
+	if (part_num >= partitions) {
+		librsu_log(MED, __func__, "No FACTORY_IMAGE partition defined");
+		return -EFORMAT;
+	}
+
+	offset = ll_intf->partition.offset(part_num);
+
+	if (librsu_misc_put_devattr("reboot_image", offset))
 		return -EFILEIO;
 
 	return 0;

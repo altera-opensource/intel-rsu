@@ -217,51 +217,100 @@ static int load_spt0_offset(void)
 	return -1;
 }
 
+/**
+ * Check SPT1 and then SPT0. If they both pass checks, use SPT0.
+ * If only one passes, retore the bad one. If both are bad, fail.
+ */
 static int load_spt(void)
 {
+	int spt0_good = 0;
+	int spt1_good = 0;
 	spt0_offset = 0;
 
+	librsu_log(HIGH, __func__, "SPT1");
+	if (read_dev(SPT1_OFFSET, &spt, sizeof(spt)) == 0 &&
+	    spt.magic_number == SPT_MAGIC_NUMBER) {
+		if (check_spt() == 0 && load_spt0_offset() == 0)
+			spt1_good = 1;
+		else
+			librsu_log(MED, __func__, "SPT1 validity check failed");
+	} else {
+		librsu_log(MED, __func__, "Bad SPT1 magic number 0x%08X",
+			   spt.magic_number);
+	}
+
+	librsu_log(HIGH, __func__, "SPT0");
 	if (read_dev(SPT0_OFFSET, &spt, sizeof(spt)) == 0 &&
 	    spt.magic_number == SPT_MAGIC_NUMBER) {
 		if (check_spt() == 0 && load_spt0_offset() == 0)
-			return 0;
-		librsu_log(MED, __func__, "SPT0 validitiy check failed");
+			spt0_good = 1;
+		else
+			librsu_log(MED, __func__, "SPT0 validitiy check fail");
 	} else {
 		librsu_log(MED, __func__, "Bad SPT0 magic number 0x%08X",
 			   spt.magic_number);
 	}
 
-	if (read_dev(SPT1_OFFSET, &spt, sizeof(spt)) == 0 &&
-	    spt.magic_number == SPT_MAGIC_NUMBER) {
-		if (check_spt() == 0 && load_spt0_offset() == 0) {
+	if (spt0_good && spt1_good)
+		return 0;
+
+	if (spt0_good) {
+		librsu_log(LOW, __func__, "warning: Restoring SPT1");
+
+		if (erase_dev(SPT1_OFFSET, 32 * 1024)) {
 			librsu_log(LOW, __func__,
-				   "warning: Restoring SPT0 from SPT1 backup");
-
-			if (erase_dev(0, 32 * 1024)) {
-				librsu_log(LOW, __func__,
-					   "error: Erase SPT0 region failed");
-				return -1;
-			}
-
-			spt.magic_number = (__s32)0xFFFFFFFF;
-			if (write_dev(0, &spt, sizeof(spt))) {
-				librsu_log(LOW, __func__,
-					   "error: Unable to write SPT0 table");
-				return -1;
-			}
-			spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
-			if (write_dev(0, &spt, sizeof(spt.magic_number))) {
-				librsu_log(LOW, __func__,
-					   "error: Unable to wr SPT0 magic #");
-				return -1;
-			}
-
-			return 0;
+				   "error: Erase SPT1 region failed");
+			return -1;
 		}
-		librsu_log(MED, __func__, "SPT1 validity check failed");
-	} else {
-		librsu_log(MED, __func__, "Bad SPT1 magic number 0x%08X",
-			   spt.magic_number);
+
+		spt.magic_number = (__s32)0xFFFFFFFF;
+		if (write_dev(SPT1_OFFSET, &spt, sizeof(spt))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write SPT1 table");
+			return -1;
+		}
+
+		spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
+		if (write_dev(SPT1_OFFSET, &spt, sizeof(spt.magic_number))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to wr SPT1 magic #");
+			return -1;
+		}
+
+		return 0;
+	}
+
+	if (spt1_good) {
+		if (read_dev(SPT1_OFFSET, &spt, sizeof(spt)) ||
+		    spt.magic_number != SPT_MAGIC_NUMBER ||
+		    check_spt() || load_spt0_offset()) {
+			librsu_log(MED, __func__, "error: Failed to load SPT1");
+			return -1;
+		}
+
+		librsu_log(LOW, __func__, "warning: Restoring SPT0");
+
+		if (erase_dev(SPT0_OFFSET, 32 * 1024)) {
+			librsu_log(LOW, __func__,
+				   "error: Erase SPT0 region failed");
+			return -1;
+		}
+
+		spt.magic_number = (__s32)0xFFFFFFFF;
+		if (write_dev(SPT0_OFFSET, &spt, sizeof(spt))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write SPT0 table");
+			return -1;
+		}
+
+		spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
+		if (write_dev(SPT0_OFFSET, &spt, sizeof(spt.magic_number))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to wr SPT0 magic #");
+			return -1;
+		}
+
+		return 0;
 	}
 
 	librsu_log(LOW, __func__, "error: No valid SPT0 or SPT1 found");
@@ -377,80 +426,119 @@ static int check_cpb(void)
 	return 0;
 }
 
+/**
+ * Check CPB1 and then CPB0. If they both pass checks, use CPB0.
+ * If only one passes, retore the bad one. If both are bad, fail.
+ */
 static int load_cpb(void)
 {
-	int x, cpb0_part;
+	int x;
+	int cpb0_part = -1;
+	int cpb0_good = 0;
+	int cpb1_part = -1;
+	int cpb1_good = 0;
 
 	for (x = 0; x < spt.partitions; x++) {
-		if (strcmp(spt.partition[x].name, "CPB0") != 0)
-			continue;
+		if (strcmp(spt.partition[x].name, "CPB0") == 0)
+			cpb0_part = x;
+		else if (strcmp(spt.partition[x].name, "CPB1") == 0)
+			cpb1_part = x;
 
-		if (read_part(x, 0, &cpb, sizeof(cpb)) ||
-		    cpb.header.magic_number != CPB_MAGIC_NUMBER) {
-			librsu_log(MED, __func__,
-				   "Bad CPB0 magic number 0x%08X",
-				   cpb.header.magic_number);
+		if (cpb0_part >= 0 && cpb1_part >= 0)
 			break;
-		}
-
-		cpb_slots = (CMF_POINTER *)
-		    &cpb.data[cpb.header.image_ptr_offset];
-
-		if (!check_cpb())
-			return 0;
-		librsu_log(MED, __func__, "CPB0 valid check failed");
-
-		break;
 	}
 
-	if (x < spt.partitions) {
-		cpb0_part = x;
-	} else {
-		librsu_log(LOW, __func__, "error: CPB0 not found in SPT");
+	if (cpb0_part < 0 || cpb1_part < 0) {
+		librsu_log(LOW, __func__, "error: Missing CPB0/1 partition");
 		return -1;
 	}
 
-	for (x = 0; x < spt.partitions; x++) {
-		if (strcmp(spt.partition[x].name, "CPB1") != 0)
-			continue;
+	librsu_log(HIGH, __func__, "CPB1");
+	if (read_part(cpb1_part, 0, &cpb, sizeof(cpb)) == 0 &&
+	    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
+		cpb_slots = (CMF_POINTER *)
+			&cpb.data[cpb.header.image_ptr_offset];
+		if (check_cpb() == 0)
+			cpb1_good = 1;
+	} else {
+		librsu_log(MED, __func__, "Bad CPB1 is bad");
+	}
 
-		if (read_part(x, 0, &cpb, sizeof(cpb)) ||
-		    cpb.header.magic_number != CPB_MAGIC_NUMBER) {
-			librsu_log(MED, __func__,
-				   "Bad CPB1 magic number 0x%08X",
-				   cpb.header.magic_number);
-			break;
+	librsu_log(HIGH, __func__, "CPB0");
+	if (read_part(cpb0_part, 0, &cpb, sizeof(cpb)) == 0 &&
+	    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
+		cpb_slots = (CMF_POINTER *)
+			&cpb.data[cpb.header.image_ptr_offset];
+		if (check_cpb() == 0)
+			cpb0_good = 1;
+	} else {
+		librsu_log(MED, __func__, "Bad CPB0 is bad");
+	}
+
+	if (cpb0_good && cpb1_good) {
+		cpb_slots = (CMF_POINTER *)
+		    &cpb.data[cpb.header.image_ptr_offset];
+		return 0;
+	}
+
+	if (cpb0_good) {
+		librsu_log(LOW, __func__, "warning: Restoring CPB1");
+		if (erase_part(cpb1_part)) {
+			librsu_log(LOW, __func__,
+				   "error: Failed erase CPB1");
+			return -1;
+		}
+
+		cpb.header.magic_number = (__s32)0xFFFFFFFF;
+		if (write_part(cpb1_part, 0, &cpb, sizeof(cpb))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write CPB1 table");
+			return -1;
+		}
+		cpb.header.magic_number = (__s32)CPB_MAGIC_NUMBER;
+		if (write_part(cpb1_part, 0, &cpb,
+			       sizeof(cpb.header.magic_number))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write CPB1 magic number");
+			return -1;
 		}
 
 		cpb_slots = (CMF_POINTER *)
 		    &cpb.data[cpb.header.image_ptr_offset];
+		return 0;
+	}
 
-		if (!check_cpb()) {
-			if (erase_part(cpb0_part)) {
-				librsu_log(LOW, __func__,
-					   "error: Failed erase CPB0");
-				return -1;
-			}
-
-			cpb.header.magic_number = (__s32)0xFFFFFFFF;
-			if (write_part(cpb0_part, 0, &cpb, sizeof(cpb))) {
-				librsu_log(LOW, __func__,
-					   "error: Unable to write CPB0 table");
-				return -1;
-			}
-			cpb.header.magic_number = (__s32)CPB_MAGIC_NUMBER;
-			if (write_part(cpb0_part, 0, &cpb,
-				       sizeof(cpb.header.magic_number))) {
-				librsu_log(LOW, __func__,
-					   "error: Unable to write CPB0 magic number");
-				return -1;
-			}
-
-			return 0;
+	if (cpb1_good) {
+		if (read_part(cpb1_part, 0, &cpb, sizeof(cpb)) ||
+		    cpb.header.magic_number != CPB_MAGIC_NUMBER) {
+			librsu_log(MED, __func__, "error: Unable to load CPB1");
+			return -1;
 		}
-		librsu_log(MED, __func__, "CPB1 validity check failed");
 
-		break;
+		librsu_log(LOW, __func__, "warning: Restoring CPB0");
+		if (erase_part(cpb0_part)) {
+			librsu_log(LOW, __func__,
+				   "error: Failed erase CPB0");
+			return -1;
+		}
+
+		cpb.header.magic_number = (__s32)0xFFFFFFFF;
+		if (write_part(cpb0_part, 0, &cpb, sizeof(cpb))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write CPB0 table");
+			return -1;
+		}
+		cpb.header.magic_number = (__s32)CPB_MAGIC_NUMBER;
+		if (write_part(cpb0_part, 0, &cpb,
+			       sizeof(cpb.header.magic_number))) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to write CPB0 magic number");
+			return -1;
+		}
+
+		cpb_slots = (CMF_POINTER *)
+		    &cpb.data[cpb.header.image_ptr_offset];
+		return 0;
 	}
 
 	librsu_log(LOW, __func__, "error: No valid CPB0 or CPB1 found");

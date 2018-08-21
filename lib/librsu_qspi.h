@@ -15,6 +15,7 @@
 #define SPT1_OFFSET (32 * 1024)
 
 #define SPT_MAGIC_NUMBER 0x57713427
+#define SPT_VERSION 0
 #define SPT_FLAG_RESERVED 1
 #define SPT_FLAG_READONLY 2
 
@@ -33,6 +34,7 @@ struct SUB_PARTITION_TABLE {
 } __attribute__((__packed__));
 
 #define CPB_MAGIC_NUMBER 0x57789609
+#define CPB_HEADER_SIZE 24
 
 union CMF_POINTER_BLOCK {
 	struct {

@@ -173,6 +173,15 @@ static int check_spt(void)
 	librsu_log(HIGH, __func__, "MAX length of a name = %i bytes",
 		   max_len - 1);
 
+	if (spt.version > SPT_VERSION) {
+		librsu_log(LOW, __func__,
+			   "warning: SPT version %i is greater than %i",
+			   spt.version, SPT_VERSION);
+		librsu_log(LOW, __func__,
+			   "LIBRSU Version %i - update to enable newer features",
+			   LIBRSU_VER);
+	}
+
 	for (x = 0; x < spt.partitions; x++) {
 		if (strnlen(spt.partition[x].name, max_len) >= max_len)
 			spt.partition[x].name[max_len - 1] = '\0';
@@ -404,6 +413,14 @@ static CMF_POINTER *cpb_slots;
 static int check_cpb(void)
 {
 	int x, y;
+
+	if (cpb.header.header_size > CPB_HEADER_SIZE) {
+		librsu_log(LOW, __func__,
+			   "warning: CPB header is larger than expected");
+		librsu_log(LOW, __func__,
+			   "LIBRSU Version %i - update to enable newer features",
+			   LIBRSU_VER);
+	}
 
 	for (x = 0; x < cpb.header.image_ptr_slots; x++) {
 		if (cpb_slots[x] != ERASED_ENTRY &&

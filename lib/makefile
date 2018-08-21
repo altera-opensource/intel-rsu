@@ -26,7 +26,7 @@ librsu.so: $(SRC:.c=.o)
 	$(CROSS_COMPILE)gcc $(LDFLAGS) -o $@ $(SRC:.c=.o)
 
 %.o : %.c
-	$(CROSS_COMPILE)gcc $(CFLAGS) -fPIC -c $< -o $@
+	$(CROSS_COMPILE)gcc $(CFLAGS) -DLIBRSU_VER=$(LIBRSU_VER) -fPIC -c $< -o $@
 
 clean:
 	rm -rf $(SRC:.c=.o) librsu.so

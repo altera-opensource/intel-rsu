@@ -3,6 +3,11 @@
 /* Intel Copyright 2018 */
 
 #include <fcntl.h>
+#include "librsu_cb.h"
+#include "librsu_cfg.h"
+#include "librsu_image.h"
+#include "librsu_ll.h"
+#include "librsu_misc.h"
 #include <string.h>
 #include <unistd.h>
 
@@ -84,4 +89,163 @@ int librsu_cb_buf(void *buf, int len)
 		cb_buffer = NULL;
 
 	return read_len;
+}
+
+int librsu_cb_program_common(struct librsu_ll_intf *ll_intf, int slot,
+			     rsu_data_callback callback, int rawdata)
+{
+	int part_num;
+	int offset;
+	unsigned char buf[IMAGE_BLOCK_SZ];
+	unsigned char vbuf[IMAGE_BLOCK_SZ];
+	int cnt, c, done;
+	int x;
+	struct rsu_slot_info info;
+
+	if (!ll_intf)
+		return -ELIB;
+
+	if (librsu_cfg_writeprotected(slot)) {
+		librsu_log(HIGH, __func__,
+			   "Trying to program a write protected slot");
+		return -EWRPROT;
+	}
+
+	if (rsu_slot_get_info(slot, &info)) {
+		librsu_log(HIGH, __func__, "Unable to read slot info");
+		return -ESLOTNUM;
+	}
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
+
+	if (ll_intf->priority.get(part_num) > 0) {
+		librsu_log(HIGH, __func__,
+			   "Trying to program a slot already in use");
+		return -EPROGRAM;
+	}
+
+	if (!callback)
+		return -EARGS;
+
+	offset = 0;
+	done = 0;
+
+	while (!done) {
+		cnt = 0;
+		while (cnt < IMAGE_BLOCK_SZ) {
+			c = callback(buf + cnt, IMAGE_BLOCK_SZ - cnt);
+			if (c == 0) {
+				done = 1;
+				break;
+			} else if (c < 0) {
+				return -ECALLBACK;
+			}
+
+			cnt += c;
+		}
+
+		if (cnt == 0)
+			break;
+
+		if (!rawdata && offset == IMAGE_PTR_BLOCK &&
+		    cnt == IMAGE_BLOCK_SZ && librsu_image_adjust(buf, &info))
+			return -EPROGRAM;
+
+		if ((offset + cnt) > ll_intf->partition.size(part_num)) {
+			librsu_log(HIGH, __func__,
+				   "Trying to program too much data into slot");
+			return -ESIZE;
+		}
+
+		if (ll_intf->data.write(part_num, offset, cnt, buf))
+			return -ELOWLEVEL;
+
+		if (ll_intf->data.read(part_num, offset, cnt, vbuf))
+			return -ELOWLEVEL;
+
+		for (x = 0; x < cnt; x++)
+			if (vbuf[x] != buf[x]) {
+				librsu_log(HIGH, __func__,
+					   "Expect %02X, got %02X @ 0x%08X",
+					   buf[x], vbuf[x], offset + x);
+				return -ECMP;
+			}
+
+		offset += cnt;
+	}
+
+	if (!rawdata && ll_intf->priority.add(part_num))
+		return -ELOWLEVEL;
+
+	return 0;
+}
+
+int librsu_cb_verify_common(struct librsu_ll_intf *ll_intf, int slot,
+			    rsu_data_callback callback, int rawdata)
+{
+	int part_num;
+	int offset;
+	unsigned char buf[IMAGE_BLOCK_SZ];
+	unsigned char vbuf[IMAGE_BLOCK_SZ];
+	int cnt, c, done;
+	int x;
+
+	if (!ll_intf)
+		return -ELIB;
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
+
+	if (!rawdata && ll_intf->priority.get(part_num) <= 0) {
+		librsu_log(HIGH, __func__,
+			   "Trying to verify a slot not in use");
+		return -EERASE;
+	}
+
+	if (!callback)
+		return -EARGS;
+
+	offset = 0;
+	done = 0;
+
+	while (!done) {
+		cnt = 0;
+		while (cnt < IMAGE_BLOCK_SZ) {
+			c = callback(buf + cnt, IMAGE_BLOCK_SZ - cnt);
+			if (c == 0) {
+				done = 1;
+				break;
+			} else if (c < 0) {
+				return -ECALLBACK;
+			}
+
+			cnt += c;
+		}
+
+		if (cnt == 0)
+			break;
+
+		if (ll_intf->data.read(part_num, offset, cnt, vbuf))
+			return -ELOWLEVEL;
+
+		for (x = 0; x < cnt; x++) {
+			if (!rawdata && (offset + x) >= IMAGE_PTR_START &&
+			    (offset + x) <= IMAGE_PTR_END)
+				continue;
+
+			if (vbuf[x] != buf[x]) {
+				librsu_log(HIGH, __func__,
+					   "Expect %02X, got %02X @ 0x%08X",
+					   buf[x], vbuf[x], offset + x);
+				return -ECMP;
+			}
+		}
+
+		offset += cnt;
+	}
+
+	return 0;
 }

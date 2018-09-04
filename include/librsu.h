@@ -95,7 +95,8 @@ int rsu_slot_size(int slot);
 int rsu_slot_priority(int slot);
 
 /*
- * rsu_slot_erase() - erase all data in a slot to prepare for programming
+ * rsu_slot_erase() - erase all data in a slot to prepare for programming.
+ *                    Remove the slot if it is in the CPB.
  * slot: slot number
  *
  * Returns 0 on success, or Error Cdoe
@@ -103,7 +104,8 @@ int rsu_slot_priority(int slot);
 int rsu_slot_erase(int slot);
 
 /*
- * rsu_slot_program_buf() - program a slot using data from a buffer
+ * rsu_slot_program_buf() - program a slot using FPGA config data from a buffer
+ *                          and enter slot into CPB
  * slot: slot number
  * buf: pointer to data buffer
  * size: bytes to read from buffer
@@ -113,7 +115,8 @@ int rsu_slot_erase(int slot);
 int rsu_slot_program_buf(int slot, void *buf, int size);
 
 /*
- * rsu_slot_program_file() - program a slot using data from a file
+ * rsu_slot_program_file() - program a slot using FPGA config data from a file
+ *                           and enter slot into CPB
  * slot: slot number
  * filename: input data file
  *
@@ -122,7 +125,28 @@ int rsu_slot_program_buf(int slot, void *buf, int size);
 int rsu_slot_program_file(int slot, char *filename);
 
 /*
- * rsu_slot_verify_buf() - verify the data in a slot compared to a buffer
+ * rsu_slot_program_buf_raw() - program a slot using raw data from a buffer.
+ *                              The slot is not entered into the CPB
+ * slot: slot number
+ * buf: pointer to data buffer
+ * size: bytes to read from buffer
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_program_buf_raw(int slot, void *buf, int size);
+
+/*
+ * rsu_slot_program_file_raw() - program a slot using raw data from a file.
+ *                               The slot is not entered into the CPB
+ * slot: slot number
+ * filename: input data file
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_program_file_raw(int slot, char *filename);
+
+/*
+ * rsu_slot_verify_buf() - verify FPGA config data in a slot against a buffer
  * slot: slot number
  * buf: pointer to data buffer
  * size: bytes to read from buffer
@@ -132,7 +156,7 @@ int rsu_slot_program_file(int slot, char *filename);
 int rsu_slot_verify_buf(int slot, void *buf, int size);
 
 /*
- * rsu_slot_verify_file() - verify the data in a slot compared to a file
+ * rsu_slot_verify_file() - verify FPGA config data in a slot against a file
  * slot: slot number
  * filename: input data file
  *
@@ -141,13 +165,33 @@ int rsu_slot_verify_buf(int slot, void *buf, int size);
 int rsu_slot_verify_file(int slot, char *filename);
 
 /*
+ * rsu_slot_verify_buf_raw() - verify raw data in a slot against a buffer
+ * slot: slot number
+ * buf: pointer to data buffer
+ * size: bytes to read from buffer
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_verify_buf_raw(int slot, void *buf, int size);
+
+/*
+ * rsu_slot_verify_file_raw() - verify raw data in a slot against a file
+ * slot: slot number
+ * filename: input data file
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_verify_file_raw(int slot, char *filename);
+
+/*
  * rsu_data_callback - function pointer type for callback functions below
  */
 typedef int (*rsu_data_callback)(void *buf, int size);
 
 /*
- * rsu_slot_program_callback() - program and verify a slot using data
- *                               provided by a callback function.
+ * rsu_slot_program_callback() - program and verify a slot using FPGA config
+ *                               data provided by a callback function. Enter
+ *                               the slot into the CPB
  * slot: slot number
  * callback: callback function to provide input data
  *
@@ -156,14 +200,35 @@ typedef int (*rsu_data_callback)(void *buf, int size);
 int rsu_slot_program_callback(int slot, rsu_data_callback callback);
 
 /*
- * rsu_slot_verify_callback() - verify a slot using data provided by a
- *                              callback function.
+ * rsu_slot_program_callback_raw() - program and verify a slot using raw data
+ *                                   provided by a callback function.  The slot
+ *                                   is not entered into the CPB
+ * slot: slot number
+ * callback: callback function to provide input data
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_program_callback_raw(int slot, rsu_data_callback callback);
+
+/*
+ * rsu_slot_verify_callback() - verify a slot using FPGA configdata provided by
+ *                              a callback function.
  * slot: slot number
  * callback: callback function to provide input data
  *
  * Returns 0 on success, or Error Code
  */
 int rsu_slot_verify_callback(int slot, rsu_data_callback callback);
+
+/*
+ * rsu_slot_verify_callback_raw() - verify a slot using raw data provided by a
+ *                                  callback function.
+ * slot: slot number
+ * callback: callback function to provide input data
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_verify_callback_raw(int slot, rsu_data_callback callback);
 
 /*
  * rsu_slot_copy_to_file() - read the data in a slot and write to a file

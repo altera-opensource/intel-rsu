@@ -213,7 +213,7 @@ int rsu_slot_program_buf(int slot, void *buf, int size)
 		return -EARGS;
 	}
 
-	rtn = rsu_slot_program_callback(slot, librsu_cb_buf);
+	rtn = librsu_cb_program_common(ll_intf, slot, librsu_cb_buf, 0);
 
 	librsu_cb_buf_cleanup();
 
@@ -230,7 +230,40 @@ int rsu_slot_program_file(int slot, char *filename)
 		return -EFILEIO;
 	}
 
-	rtn = rsu_slot_program_callback(slot, librsu_cb_file);
+	rtn = librsu_cb_program_common(ll_intf, slot, librsu_cb_file, 0);
+
+	librsu_cb_file_cleanup();
+
+	return rtn;
+}
+
+int rsu_slot_program_buf_raw(int slot, void *buf, int size)
+{
+	int rtn;
+
+	if (librsu_cb_buf_init(buf, size)) {
+		librsu_log(HIGH, __func__, "Bad buf/size arguments");
+		return -EARGS;
+	}
+
+	rtn = librsu_cb_program_common(ll_intf, slot, librsu_cb_buf, 1);
+
+	librsu_cb_buf_cleanup();
+
+	return rtn;
+}
+
+int rsu_slot_program_file_raw(int slot, char *filename)
+{
+	int rtn;
+
+	if (librsu_cb_file_init(filename)) {
+		librsu_log(HIGH, __func__, "Unable to open file '%s'",
+			   filename);
+		return -EFILEIO;
+	}
+
+	rtn = librsu_cb_program_common(ll_intf, slot, librsu_cb_file, 1);
 
 	librsu_cb_file_cleanup();
 
@@ -246,7 +279,7 @@ int rsu_slot_verify_buf(int slot, void *buf, int size)
 		return -EARGS;
 	}
 
-	rtn = rsu_slot_verify_callback(slot, librsu_cb_buf);
+	rtn = librsu_cb_verify_common(ll_intf, slot, librsu_cb_buf, 0);
 
 	librsu_cb_buf_cleanup();
 
@@ -263,7 +296,40 @@ int rsu_slot_verify_file(int slot, char *filename)
 		return -EFILEIO;
 	}
 
-	rtn = rsu_slot_verify_callback(slot, librsu_cb_file);
+	rtn = librsu_cb_verify_common(ll_intf, slot, librsu_cb_file, 0);
+
+	librsu_cb_file_cleanup();
+
+	return rtn;
+}
+
+int rsu_slot_verify_buf_raw(int slot, void *buf, int size)
+{
+	int rtn;
+
+	if (librsu_cb_buf_init(buf, size)) {
+		librsu_log(HIGH, __func__, "Bad buf/size arguments");
+		return -EARGS;
+	}
+
+	rtn = librsu_cb_verify_common(ll_intf, slot, librsu_cb_buf, 1);
+
+	librsu_cb_buf_cleanup();
+
+	return rtn;
+}
+
+int rsu_slot_verify_file_raw(int slot, char *filename)
+{
+	int rtn;
+
+	if (librsu_cb_file_init(filename)) {
+		librsu_log(HIGH, __func__, "Unable to open file '%s'",
+			   filename);
+		return -EFILEIO;
+	}
+
+	rtn = librsu_cb_verify_common(ll_intf, slot, librsu_cb_file, 1);
 
 	librsu_cb_file_cleanup();
 
@@ -272,159 +338,22 @@ int rsu_slot_verify_file(int slot, char *filename)
 
 int rsu_slot_program_callback(int slot, rsu_data_callback callback)
 {
-	int part_num;
-	int offset;
-	unsigned char buf[IMAGE_BLOCK_SZ];
-	unsigned char vbuf[IMAGE_BLOCK_SZ];
-	int cnt, c, done;
-	int x;
-	struct rsu_slot_info info;
+	return librsu_cb_program_common(ll_intf, slot, callback, 0);
+}
 
-	if (!ll_intf)
-		return -ELIB;
-
-	if (librsu_cfg_writeprotected(slot)) {
-		librsu_log(HIGH, __func__,
-			   "Trying to program a write protected slot");
-		return -EWRPROT;
-	}
-
-	if (rsu_slot_get_info(slot, &info)) {
-		librsu_log(HIGH, __func__, "Unable to read slot info");
-		return -ESLOTNUM;
-	}
-
-	part_num = librsu_misc_slot2part(ll_intf, slot);
-	if (part_num < 0)
-		return -ESLOTNUM;
-
-	if (ll_intf->priority.get(part_num) > 0) {
-		librsu_log(HIGH, __func__,
-			   "Trying to program a slot already in use");
-		return -EPROGRAM;
-	}
-
-	if (!callback)
-		return -EARGS;
-
-	offset = 0;
-	done = 0;
-
-	while (!done) {
-		cnt = 0;
-		while (cnt < IMAGE_BLOCK_SZ) {
-			c = callback(buf + cnt, IMAGE_BLOCK_SZ - cnt);
-			if (c == 0) {
-				done = 1;
-				break;
-			} else if (c < 0) {
-				return -ECALLBACK;
-			}
-
-			cnt += c;
-		}
-
-		if (cnt == 0)
-			break;
-
-		if (offset == IMAGE_PTR_BLOCK && cnt == IMAGE_BLOCK_SZ &&
-		    librsu_image_adjust(buf, &info))
-			return -EPROGRAM;
-
-		if ((offset + cnt) > ll_intf->partition.size(part_num)) {
-			librsu_log(HIGH, __func__,
-				   "Trying to program too much data into slot");
-			return -ESIZE;
-		}
-
-		if (ll_intf->data.write(part_num, offset, cnt, buf))
-			return -ELOWLEVEL;
-
-		if (ll_intf->data.read(part_num, offset, cnt, vbuf))
-			return -ELOWLEVEL;
-
-		for (x = 0; x < cnt; x++)
-			if (vbuf[x] != buf[x]) {
-				librsu_log(HIGH, __func__,
-					   "Expect %02X, got %02X @ 0x%08X",
-					   buf[x], vbuf[x], offset + x);
-				return -ECMP;
-			}
-
-		offset += cnt;
-	}
-
-	if (ll_intf->priority.add(part_num))
-		return -ELOWLEVEL;
-
-	return 0;
+int rsu_slot_program_callback_raw(int slot, rsu_data_callback callback)
+{
+	return librsu_cb_program_common(ll_intf, slot, callback, 1);
 }
 
 int rsu_slot_verify_callback(int slot, rsu_data_callback callback)
 {
-	int part_num;
-	int offset;
-	unsigned char buf[IMAGE_BLOCK_SZ];
-	unsigned char vbuf[IMAGE_BLOCK_SZ];
-	int cnt, c, done;
-	int x;
+	return librsu_cb_verify_common(ll_intf, slot, callback, 0);
+}
 
-	if (!ll_intf)
-		return -ELIB;
-
-	part_num = librsu_misc_slot2part(ll_intf, slot);
-	if (part_num < 0)
-		return -ESLOTNUM;
-
-	if (ll_intf->priority.get(part_num) <= 0) {
-		librsu_log(HIGH, __func__,
-			   "Trying to verify a slot not in use");
-		return -EERASE;
-	}
-
-	if (!callback)
-		return -EARGS;
-
-	offset = 0;
-	done = 0;
-
-	while (!done) {
-		cnt = 0;
-		while (cnt < IMAGE_BLOCK_SZ) {
-			c = callback(buf + cnt, IMAGE_BLOCK_SZ - cnt);
-			if (c == 0) {
-				done = 1;
-				break;
-			} else if (c < 0) {
-				return -ECALLBACK;
-			}
-
-			cnt += c;
-		}
-
-		if (cnt == 0)
-			break;
-
-		if (ll_intf->data.read(part_num, offset, cnt, vbuf))
-			return -ELOWLEVEL;
-
-		for (x = 0; x < cnt; x++) {
-			if ((offset + x) >= IMAGE_PTR_START &&
-			    (offset + x) <= IMAGE_PTR_END)
-				continue;
-
-			if (vbuf[x] != buf[x]) {
-				librsu_log(HIGH, __func__,
-					   "Expect %02X, got %02X @ 0x%08X",
-					   buf[x], vbuf[x], offset + x);
-				return -ECMP;
-			}
-		}
-
-		offset += cnt;
-	}
-
-	return 0;
+int rsu_slot_verify_callback_raw(int slot, rsu_data_callback callback)
+{
+	return librsu_cb_verify_common(ll_intf, slot, callback, 1);
 }
 
 int rsu_slot_copy_to_file(int slot, char *filename)

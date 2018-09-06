@@ -24,7 +24,9 @@ enum rsu_clinet_command_code {
 	COMMAND_FACTORY_LOAD,
 	COMMAND_SLOT_ERASE,
 	COMMAND_ADD_IMAGE,
+	COMMAND_ADD_RAW_IMAGE,
 	COMMAND_VERIFY_IMAGE,
+	COMMAND_VERIFY_RAW_IMAGE,
 	COMMAND_COPY_TO_FILE,
 	COMMAND_STATUS_LOG
 };
@@ -40,9 +42,11 @@ static const struct option opts[] = {
 	{"enable", required_argument, NULL, 'E'},
 	{"disable", required_argument, NULL, 'D'},
 	{"add", required_argument, NULL, 'a'},
+	{"add-raw", required_argument, NULL, 'A'},
 	{"slot", required_argument, NULL, 's'},
 	{"erase", required_argument, NULL, 'e'},
 	{"verify", required_argument, NULL, 'v'},
+	{"verify-raw", required_argument, NULL, 'V'},
 	{"copy", required_argument, NULL, 'f'},
 	{"request", required_argument, NULL, 'r'},
 	{NULL, 0, NULL, 0}
@@ -75,8 +79,12 @@ static void rsu_client_usage(void)
 	       "erase app image from the selected slot\n");
 	printf("%-32s  %s", "-a|--add file_name [-s|--slot] slot_num",
 	       "add a new app image to the selected slot, the default slot is 0 if user doesn't specify\n");
+	printf("%-32s  %s", "-A|--add-raw file_name [-s|--slot] slot_num",
+	       "add a new raw image to the selected slot, the default slot is 0 if user doesn't specify\n");
 	printf("%-32s  %s", "-v|--verify file_name [-s|--slot] slot_num",
 	       "verify app image on the selected slot, the default slot is 0 if user doesn't specify\n");
+	printf("%-32s  %s", "-V|--verify-raw file_name [-s|--slot] slot_num",
+	       "verify raw image on the selected slot, the default slot is 0 if user doesn't specify\n");
 	printf("%-32s  %s", "-f|--copy file_name -s|--slot slot_num",
 	       "read the data in a selected slot then write to a file\n");
 	printf("%-32s  %s", "-g|--log", "print the status log\n");
@@ -213,11 +221,15 @@ static int rsu_client_get_priority(int slot_num)
  * rsu_add_app_image() - add a new application image
  * image_name: name of the application image
  * slot_name: the selected slot
+ * raw: raw file if set, app file if cleared
  *
  * Return: 0 on success, or negative value on error
  */
-static int rsu_client_add_app_image(char *image_name, int slot_num)
+static int rsu_client_add_app_image(char *image_name, int slot_num, int raw)
 {
+	if (raw)
+		return rsu_slot_program_file_raw(slot_num, image_name);
+
 	return rsu_slot_program_file(slot_num, image_name);
 }
 
@@ -236,11 +248,15 @@ static int rsu_client_erase_image(int slot_num)
  * rsu_client_verify_data() - verify the data in selected slot compared to file
  * file_name: file name
  * slot_num: the selected slot
+ * raw: raw file if set, app file if cleared
  *
  * Return: 0 on success, or negativer on error.
  */
-static int rsu_client_verify_data(char *file_name, int slot_num)
+static int rsu_client_verify_data(char *file_name, int slot_num, int raw)
 {
+	if (raw)
+		return rsu_slot_verify_file_raw(slot_num, file_name);
+
 	return rsu_slot_verify_file(slot_num, file_name);
 }
 
@@ -284,7 +300,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:s:e:v:f:r:E:D:",
+				"cghRl:z:p:t:a:A:s:e:v:V:f:r:E:D:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -364,10 +380,22 @@ int main(int argc, char *argv[])
 			command = COMMAND_ADD_IMAGE;
 			filename = optarg;
 			break;
+		case 'A':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_ADD_RAW_IMAGE;
+			filename = optarg;
+			break;
 		case 'v':
 			if (command != COMMAND_NONE)
 				error_exit("Only one command allowed");
 			command = COMMAND_VERIFY_IMAGE;
+			filename = optarg;
+			break;
+		case 'V':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_VERIFY_RAW_IMAGE;
 			filename = optarg;
 			break;
 		case 'f':
@@ -445,14 +473,28 @@ int main(int argc, char *argv[])
 	case COMMAND_ADD_IMAGE:
 		if (slot_num < 0)
 			error_exit("Slot number must be set");
-		ret = rsu_client_add_app_image(filename, slot_num);
+		ret = rsu_client_add_app_image(filename, slot_num, 0);
+		if (ret < 0)
+			error_exit("Failed to add application image");
+		break;
+	case COMMAND_ADD_RAW_IMAGE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_add_app_image(filename, slot_num, 1);
 		if (ret < 0)
 			error_exit("Failed to add application image");
 		break;
 	case COMMAND_VERIFY_IMAGE:
 		if (slot_num < 0)
 			error_exit("Slot number must be set");
-		ret = rsu_client_verify_data(filename, slot_num);
+		ret = rsu_client_verify_data(filename, slot_num, 0);
+		if (ret < 0)
+			error_exit("Failed to verify application image");
+		break;
+	case COMMAND_VERIFY_RAW_IMAGE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_verify_data(filename, slot_num, 1);
 		if (ret < 0)
 			error_exit("Failed to verify application image");
 		break;

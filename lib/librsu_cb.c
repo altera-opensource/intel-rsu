@@ -101,6 +101,7 @@ int librsu_cb_program_common(struct librsu_ll_intf *ll_intf, int slot,
 	int cnt, c, done;
 	int x;
 	struct rsu_slot_info info;
+	struct rsu_image_state state;
 
 	if (!ll_intf)
 		return -ELIB;
@@ -132,6 +133,9 @@ int librsu_cb_program_common(struct librsu_ll_intf *ll_intf, int slot,
 	offset = 0;
 	done = 0;
 
+	if (librsu_image_block_init(&state))
+		return -ELIB;
+
 	while (!done) {
 		cnt = 0;
 		while (cnt < IMAGE_BLOCK_SZ) {
@@ -149,9 +153,10 @@ int librsu_cb_program_common(struct librsu_ll_intf *ll_intf, int slot,
 		if (cnt == 0)
 			break;
 
-		if (!rawdata && offset == IMAGE_PTR_BLOCK &&
-		    cnt == IMAGE_BLOCK_SZ && librsu_image_adjust(buf, &info))
-			return -EPROGRAM;
+		if (!rawdata)
+			if (librsu_image_block_process(&state, buf, NULL,
+				&info))
+				return -EPROGRAM;
 
 		if ((offset + cnt) > ll_intf->partition.size(part_num)) {
 			librsu_log(HIGH, __func__,
@@ -191,9 +196,16 @@ int librsu_cb_verify_common(struct librsu_ll_intf *ll_intf, int slot,
 	unsigned char vbuf[IMAGE_BLOCK_SZ];
 	int cnt, c, done;
 	int x;
+	struct rsu_slot_info info;
+	struct rsu_image_state state;
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (rsu_slot_get_info(slot, &info)) {
+		librsu_log(HIGH, __func__, "Unable to read slot info");
+		return -ESLOTNUM;
+	}
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -210,6 +222,9 @@ int librsu_cb_verify_common(struct librsu_ll_intf *ll_intf, int slot,
 
 	offset = 0;
 	done = 0;
+
+	if (librsu_image_block_init(&state))
+		return -ELIB;
 
 	while (!done) {
 		cnt = 0;
@@ -231,18 +246,21 @@ int librsu_cb_verify_common(struct librsu_ll_intf *ll_intf, int slot,
 		if (ll_intf->data.read(part_num, offset, cnt, vbuf))
 			return -ELOWLEVEL;
 
-		for (x = 0; x < cnt; x++) {
-			if (!rawdata && (offset + x) >= IMAGE_PTR_START &&
-			    (offset + x) <= IMAGE_PTR_END)
-				continue;
+		if (!rawdata) {
+			if (librsu_image_block_process(&state, buf, vbuf,
+			    &info))
+				return -ECMP;
+			offset += cnt;
+			continue;
+		}
 
+		for (x = 0; x < cnt; x++)
 			if (vbuf[x] != buf[x]) {
 				librsu_log(HIGH, __func__,
 					   "Expect %02X, got %02X @ 0x%08X",
 					   buf[x], vbuf[x], offset + x);
 				return -ECMP;
 			}
-		}
 
 		offset += cnt;
 	}

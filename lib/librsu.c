@@ -220,6 +220,16 @@ int rsu_slot_program_buf(int slot, void *buf, int size)
 	return rtn;
 }
 
+/*
+ * This API was added to force users to use the updated image handling
+ * algorithm, introduced at the same time, which deals properly with both
+ * regular and factory update images.
+ */
+int rsu_slot_program_factory_update_buf(int slot, void *buf, int size)
+{
+	return rsu_slot_program_buf(slot, buf, size);
+}
+
 int rsu_slot_program_file(int slot, char *filename)
 {
 	int rtn;
@@ -235,6 +245,16 @@ int rsu_slot_program_file(int slot, char *filename)
 	librsu_cb_file_cleanup();
 
 	return rtn;
+}
+
+/*
+ * This API was added to force users to use the updated image handling
+ * algorithm, introduced at the same time, which deals properly with both
+ * regular and factory update images.
+ */
+int rsu_slot_program_factory_update_file(int slot, char *filename)
+{
+	return rsu_slot_program_file(slot, filename);
 }
 
 int rsu_slot_program_buf_raw(int slot, void *buf, int size)

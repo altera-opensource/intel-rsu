@@ -115,6 +115,18 @@ int rsu_slot_erase(int slot);
 int rsu_slot_program_buf(int slot, void *buf, int size);
 
 /*
+ * rsu_slot_program_factory_update_buf() - program a slot using factory update
+ *                                         data from a buffer and enter slot
+ *                                         into CPB
+ * slot: slot number
+ * buf: pointer to data buffer
+ * size: bytes to read from buffer
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_program_factory_update_buf(int slot, void *buf, int size);
+
+/*
  * rsu_slot_program_file() - program a slot using FPGA config data from a file
  *                           and enter slot into CPB
  * slot: slot number
@@ -123,6 +135,17 @@ int rsu_slot_program_buf(int slot, void *buf, int size);
  * Returns 0 on success, or Error Code
  */
 int rsu_slot_program_file(int slot, char *filename);
+
+/*
+ * rsu_slot_program_factory_update_file() - program a slot using factory update
+ *                                          data from a file and enter slot
+ *                                          into CPB
+ * slot: slot number
+ * filename: input data file
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_program_factory_update_file(int slot, char *filename);
 
 /*
  * rsu_slot_program_buf_raw() - program a slot using raw data from a buffer.

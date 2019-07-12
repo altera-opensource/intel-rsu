@@ -24,6 +24,7 @@ enum rsu_clinet_command_code {
 	COMMAND_FACTORY_LOAD,
 	COMMAND_SLOT_ERASE,
 	COMMAND_ADD_IMAGE,
+	COMMAND_ADD_FACTORY_UPDATE_IMAGE,
 	COMMAND_ADD_RAW_IMAGE,
 	COMMAND_VERIFY_IMAGE,
 	COMMAND_VERIFY_RAW_IMAGE,
@@ -42,6 +43,7 @@ static const struct option opts[] = {
 	{"enable", required_argument, NULL, 'E'},
 	{"disable", required_argument, NULL, 'D'},
 	{"add", required_argument, NULL, 'a'},
+	{"add-factory-update", required_argument, NULL, 'u'},
 	{"add-raw", required_argument, NULL, 'A'},
 	{"slot", required_argument, NULL, 's'},
 	{"erase", required_argument, NULL, 'e'},
@@ -77,14 +79,16 @@ static void rsu_client_usage(void)
 	       "request the factory image to be loaded after the next reboot\n");
 	printf("%-32s  %s", "-e|--erase slot_num",
 	       "erase app image from the selected slot\n");
-	printf("%-32s  %s", "-a|--add file_name [-s|--slot] slot_num",
-	       "add a new app image to the selected slot, the default slot is 0 if user doesn't specify\n");
-	printf("%-32s  %s", "-A|--add-raw file_name [-s|--slot] slot_num",
-	       "add a new raw image to the selected slot, the default slot is 0 if user doesn't specify\n");
-	printf("%-32s  %s", "-v|--verify file_name [-s|--slot] slot_num",
-	       "verify app image on the selected slot, the default slot is 0 if user doesn't specify\n");
-	printf("%-32s  %s", "-V|--verify-raw file_name [-s|--slot] slot_num",
-	       "verify raw image on the selected slot, the default slot is 0 if user doesn't specify\n");
+	printf("%-32s  %s", "-a|--add file_name -s|--slot slot_num",
+	       "add a new app image to the selected slot\n");
+	printf("%-32s  %s", "-u|--add-factory-update file_name -s|--slot slot_num",
+	       "add a new factory update image to the selected slot\n");
+	printf("%-32s  %s", "-A|--add-raw file_name -s|--slot slot_num",
+	       "add a new raw image to the selected slot\n");
+	printf("%-32s  %s", "-v|--verify file_name -s|--slot slot_num",
+	       "verify app image on the selected slot\n");
+	printf("%-32s  %s", "-V|--verify-raw file_name -s|--slot slot_num",
+	       "verify raw image on the selected slot\n");
 	printf("%-32s  %s", "-f|--copy file_name -s|--slot slot_num",
 	       "read the data in a selected slot then write to a file\n");
 	printf("%-32s  %s", "-g|--log", "print the status log\n");
@@ -234,6 +238,19 @@ static int rsu_client_add_app_image(char *image_name, int slot_num, int raw)
 }
 
 /*
+ * rsu_client_add_factory_update_image() - add a new factory update image
+ * image_name: name of the factory update image
+ * slot_name: the selected slot
+ * raw: raw file if set, app file if cleared
+ *
+ * Return: 0 on success, or negative value on error
+ */
+static int rsu_client_add_factory_update_image(char *image_name, int slot_num)
+{
+	return rsu_slot_program_factory_update_file(slot_num, image_name);
+}
+
+/*
  * rsu_client_erase_image() - erase the application image from a selected slot
  * slot_num: the slot number
  *
@@ -300,7 +317,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:A:s:e:v:V:f:r:E:D:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -378,6 +395,12 @@ int main(int argc, char *argv[])
 			if (command != COMMAND_NONE)
 				error_exit("Only one command allowed");
 			command = COMMAND_ADD_IMAGE;
+			filename = optarg;
+			break;
+		case 'u':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_ADD_FACTORY_UPDATE_IMAGE;
 			filename = optarg;
 			break;
 		case 'A':
@@ -476,6 +499,13 @@ int main(int argc, char *argv[])
 		ret = rsu_client_add_app_image(filename, slot_num, 0);
 		if (ret < 0)
 			error_exit("Failed to add application image");
+		break;
+	case COMMAND_ADD_FACTORY_UPDATE_IMAGE:
+		if (slot_num < 0)
+			error_exit("Slot number must be set");
+		ret = rsu_client_add_factory_update_image(filename, slot_num);
+		if (ret < 0)
+			error_exit("Failed to add factory update image");
 		break;
 	case COMMAND_ADD_RAW_IMAGE:
 		if (slot_num < 0)

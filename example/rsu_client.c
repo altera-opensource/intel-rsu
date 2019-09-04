@@ -29,7 +29,10 @@ enum rsu_clinet_command_code {
 	COMMAND_VERIFY_IMAGE,
 	COMMAND_VERIFY_RAW_IMAGE,
 	COMMAND_COPY_TO_FILE,
-	COMMAND_STATUS_LOG
+	COMMAND_STATUS_LOG,
+	COMMAND_NOTIFY,
+	COMMAND_CLEAR_ERROR_STATUS,
+	COMMAND_RESET_RETRY_COUNTER
 };
 
 static const struct option opts[] = {
@@ -51,6 +54,9 @@ static const struct option opts[] = {
 	{"verify-raw", required_argument, NULL, 'V'},
 	{"copy", required_argument, NULL, 'f'},
 	{"request", required_argument, NULL, 'r'},
+	{"notify", required_argument, NULL, 'n'},
+	{"clear-error-status", no_argument, NULL, 'C'},
+	{"reset-retry-counter", no_argument, NULL, 'Z'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -92,6 +98,11 @@ static void rsu_client_usage(void)
 	printf("%-32s  %s", "-f|--copy file_name -s|--slot slot_num",
 	       "read the data in a selected slot then write to a file\n");
 	printf("%-32s  %s", "-g|--log", "print the status log\n");
+	printf("%-32s  %s", "-n|--notify value", "report software state\n");
+	printf("%-32s  %s", "-C|--clear-error-status",
+		"clear errors from the log\n");
+	printf("%-32s  %s", "-Z|--reset-retry-counter",
+		"reset current retry counter\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -131,6 +142,9 @@ static int rsu_client_copy_status_log(void)
 		printf("   FAIL IMAGE: 0x%016llX\n", info->fail_image);
 		printf("    ERROR LOC: 0x%08X\n", (int)info->error_location);
 		printf("ERROR DETAILS: 0x%08X\n", (int)info->error_details);
+		if (info->version)
+			printf("RETRY COUNTER: 0x%08X\n",
+			       (int)info->retry_counter);
 	}
 
 	free(info);
@@ -301,6 +315,7 @@ int main(int argc, char *argv[])
 	int c;
 	int index = 0;
 	int slot_num = -1;
+	int notify_value = -1;
 	enum rsu_clinet_command_code command = COMMAND_NONE;
 	char *filename = NULL;
 	int ret;
@@ -317,7 +332,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZ",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -432,6 +447,22 @@ int main(int argc, char *argv[])
 				error_exit("Only one command allowed");
 			command = COMMAND_STATUS_LOG;
 			break;
+		case 'n':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_NOTIFY;
+			notify_value = strtol(optarg, NULL, 0);
+			break;
+		case 'C':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_CLEAR_ERROR_STATUS;
+			break;
+		case 'Z':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_RESET_RETRY_COUNTER;
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -541,6 +572,23 @@ int main(int argc, char *argv[])
 		ret = rsu_client_copy_status_log();
 		if (ret)
 			error_exit("Failed to read status log");
+		break;
+	case COMMAND_NOTIFY:
+		if (notify_value < 0)
+			error_exit("Notify value must be set");
+		ret = rsu_notify(notify_value);
+		if (ret < 0)
+			error_exit("Failed to notify");
+		break;
+	case COMMAND_CLEAR_ERROR_STATUS:
+		ret = rsu_clear_error_status();
+		if (ret)
+			error_exit("Failed to clear the error status");
+		break;
+	case COMMAND_RESET_RETRY_COUNTER:
+		ret = rsu_reset_retry_counter();
+		if (ret)
+			error_exit("Failed to reset the retry counter");
 		break;
 	default:
 		error_exit("No command: try -h for help");

@@ -10,10 +10,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#ifndef DEFAULT_SYS_DRIVER
-#define DEFAULT_SYS_DRIVER "/sys/bus/platform/drivers/intel-rsu/"
-#endif
-
 static char *reserved_names[] = {
 	"BOOT_INFO",
 	"FACTORY_IMAGE",
@@ -73,8 +69,7 @@ int librsu_misc_get_devattr(char *attr, __u64 *value)
 	FILE *attr_file;
 	char buf[256];
 
-	SAFE_STRCPY(buf, sizeof(buf), DEFAULT_SYS_DRIVER,
-		    sizeof(DEFAULT_SYS_DRIVER));
+	buf[0] = '\0';
 	strcat(buf, librsu_cfg_get_rsu_dev());
 	strcat(buf, "/");
 	strcat(buf, attr);
@@ -88,7 +83,7 @@ int librsu_misc_get_devattr(char *attr, __u64 *value)
 	}
 
 	if (fgets(buf, sizeof(buf), attr_file)) {
-		*value = strtol(buf, NULL, 10);
+		*value = strtol(buf, NULL, 0);
 		fclose(attr_file);
 		return 0;
 	}
@@ -102,8 +97,7 @@ int librsu_misc_put_devattr(char *attr, __u64 value)
 	FILE *attr_file;
 	char buf[256];
 
-	SAFE_STRCPY(buf, sizeof(buf), DEFAULT_SYS_DRIVER,
-		    sizeof(DEFAULT_SYS_DRIVER));
+	buf[0] = '\0';
 	strcat(buf, librsu_cfg_get_rsu_dev());
 	strcat(buf, "/");
 	strcat(buf, attr);

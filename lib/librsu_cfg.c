@@ -8,7 +8,7 @@
 #include <string.h>
 
 #ifndef DEFAULT_RSU_DEV
-#define DEFAULT_RSU_DEV "soc:firmware:svc:rsu"
+#define DEFAULT_RSU_DEV "/sys/devices/platform/stratix10-rsu.0"
 #endif
 
 static enum RSU_LOG_TYPE { STDERR = 0, LOGFILE } logtype = STDERR;

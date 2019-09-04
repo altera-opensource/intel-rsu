@@ -4,3 +4,5 @@
 log med stderr
 
 root qspi /dev/mtd0
+
+rsu-dev /sys/devices/platform/stratix10-rsu.0

@@ -321,6 +321,7 @@ struct rsu_status_info {
 	__u64 fail_image;
 	__u64 error_location;
 	__u64 error_details;
+	__u64 retry_counter;
 };
 
 /*
@@ -330,5 +331,29 @@ struct rsu_status_info {
  * Return 0 on success, or Error Code
  */
 int rsu_status_log(struct rsu_status_info *info);
+
+/*
+ * rsu_notify() - report HPS software execution stage as a 16bit number
+ * stage: software execution stage
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_notify(int value);
+
+/*
+ * rsu_clear_error_status() - clear errors from the current status log
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_clear_error_status(void);
+
+/*
+ * rsu_reset_retry_counter() - reset the retry counter, so that the currently
+ *                             running image may be tried again after a watchdog
+ *                             timeout.
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_reset_retry_counter(void);
 
 #endif

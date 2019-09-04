@@ -17,6 +17,12 @@
 #define DEFAULT_CFG_FILENAME "/etc/librsu.rc"
 #endif
 
+
+#define RSU_NOTIFY_RESET_RETRY_COUNTER  (1 << 16)
+#define RSU_NOTIFY_CLEAR_ERROR_STATUS   (1 << 17)
+#define RSU_NOTIFY_IGNORE_STAGE         (1 << 18)
+#define RSU_NOTIFY_VALUE_MASK           0xFFFF
+
 static struct librsu_ll_intf *ll_intf;
 
 int librsu_init(char *filename)
@@ -618,6 +624,62 @@ int rsu_status_log(struct rsu_status_info *info)
 		return -EFILEIO;
 
 	if (librsu_misc_get_devattr("error_details", &info->error_details))
+		return -EFILEIO;
+
+	if (librsu_misc_get_devattr("retry_counter", &info->retry_counter))
+		return -EFILEIO;
+
+	if (!info->version)
+		info->retry_counter = 0;
+
+	return 0;
+}
+
+int rsu_notify(int value)
+{
+	__u64 notify_value;
+
+	notify_value = value & RSU_NOTIFY_VALUE_MASK;
+
+	if (librsu_misc_put_devattr("notify", notify_value))
+		return -EFILEIO;
+
+	return 0;
+}
+
+int rsu_clear_error_status(void)
+{
+	struct rsu_status_info info;
+	__u64 notify_value;
+
+	if (rsu_status_log(&info))
+		return -EFILEIO;
+
+	if (!info.version)
+		return -EFILEIO;
+
+	notify_value = RSU_NOTIFY_IGNORE_STAGE | RSU_NOTIFY_CLEAR_ERROR_STATUS;
+
+	if (librsu_misc_put_devattr("notify", notify_value))
+		return -EFILEIO;
+
+	return 0;
+}
+
+int rsu_reset_retry_counter(void)
+{
+	struct rsu_status_info info;
+	__u64 notify_value;
+
+	if (rsu_status_log(&info))
+		return -EFILEIO;
+
+	if (!info.version)
+		return -EFILEIO;
+
+	notify_value = RSU_NOTIFY_IGNORE_STAGE | RSU_NOTIFY_RESET_RETRY_COUNTER;
+
+	if (librsu_misc_put_devattr("notify", notify_value))
 		return -EFILEIO;
 
 	return 0;

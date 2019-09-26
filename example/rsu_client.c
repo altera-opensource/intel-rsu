@@ -142,7 +142,8 @@ static int rsu_client_copy_status_log(void)
 		printf("   FAIL IMAGE: 0x%016llX\n", info->fail_image);
 		printf("    ERROR LOC: 0x%08X\n", (int)info->error_location);
 		printf("ERROR DETAILS: 0x%08X\n", (int)info->error_details);
-		if (info->version)
+		if (RSU_VERSION_DCMF_VERSION(info->version) &&
+		    RSU_VERSION_ACMF_VERSION(info->version))
 			printf("RETRY COUNTER: 0x%08X\n",
 			       (int)info->retry_counter);
 	}

@@ -23,9 +23,6 @@
 #define RSU_NOTIFY_IGNORE_STAGE         (1 << 18)
 #define RSU_NOTIFY_VALUE_MASK           0xFFFF
 
-#define RSU_VERSION_DCMF_MASK		0x000000FF
-#define RSU_VERSION_ACMF_MASK		0x0000FF00
-
 static struct librsu_ll_intf *ll_intf;
 
 int librsu_init(char *filename)
@@ -632,8 +629,8 @@ int rsu_status_log(struct rsu_status_info *info)
 	if (librsu_misc_get_devattr("retry_counter", &info->retry_counter))
 		return -EFILEIO;
 
-	if (!(info->version & RSU_VERSION_ACMF_MASK) ||
-	    !(info->version & RSU_VERSION_DCMF_MASK))
+	if (!RSU_VERSION_ACMF_VERSION(info->version) ||
+	    !RSU_VERSION_DCMF_VERSION(info->version))
 		info->retry_counter = 0;
 
 	return 0;
@@ -659,7 +656,8 @@ int rsu_clear_error_status(void)
 	if (rsu_status_log(&info))
 		return -EFILEIO;
 
-	if (!(info.version & RSU_VERSION_ACMF_MASK))
+
+	if (!RSU_VERSION_ACMF_VERSION(info.version))
 		return -EFILEIO;
 
 	notify_value = RSU_NOTIFY_IGNORE_STAGE | RSU_NOTIFY_CLEAR_ERROR_STATUS;
@@ -678,8 +676,8 @@ int rsu_reset_retry_counter(void)
 	if (rsu_status_log(&info))
 		return -EFILEIO;
 
-	if (!(info.version & RSU_VERSION_DCMF_MASK) ||
-	    !(info.version & RSU_VERSION_ACMF_MASK))
+	if (!RSU_VERSION_ACMF_VERSION(info.version) ||
+	    !RSU_VERSION_DCMF_VERSION(info.version))
 		return -EFILEIO;
 
 	notify_value = RSU_NOTIFY_IGNORE_STAGE | RSU_NOTIFY_RESET_RETRY_COUNTER;

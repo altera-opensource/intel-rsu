@@ -626,12 +626,17 @@ int rsu_status_log(struct rsu_status_info *info)
 	if (librsu_misc_get_devattr("error_details", &info->error_details))
 		return -EFILEIO;
 
-	if (librsu_misc_get_devattr("retry_counter", &info->retry_counter))
-		return -EFILEIO;
+	info->retry_counter = 0;
 
 	if (!RSU_VERSION_ACMF_VERSION(info->version) ||
 	    !RSU_VERSION_DCMF_VERSION(info->version))
+		return 0;
+
+	if (librsu_misc_get_devattr("retry_counter", &info->retry_counter)) {
+		librsu_log(HIGH, __func__,
+			   "retry_counter could not be retrieved");
 		info->retry_counter = 0;
+	}
 
 	return 0;
 }

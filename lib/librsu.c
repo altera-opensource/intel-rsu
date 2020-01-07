@@ -390,7 +390,7 @@ int rsu_slot_copy_to_file(int slot, char *filename)
 	char buf[0x1000];
 	char fill[0x1000];
 	int last_write;
-	int x;
+	unsigned int x;
 
 	if (!ll_intf)
 		return -ELIB;
@@ -599,9 +599,6 @@ int rsu_slot_rename(int slot, char *name)
 
 int rsu_status_log(struct rsu_status_info *info)
 {
-	char tmp[64];
-	__u64 value;
-
 	if (!ll_intf)
 		return -ELIB;
 

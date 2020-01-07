@@ -44,7 +44,7 @@ void SAFE_STRCPY(char *dst, int dsz, char *src, int ssz)
 
 	memcpy(dst, src, len);
 	dst[len] = '\0';
-};
+}
 
 void librsu_cfg_reset(void)
 {

@@ -7,7 +7,7 @@ LIBRSU_VER = 0
 
 SRC := $(wildcard *.c)
 
-CFLAGS := -I../include/ -fPIC -fPIE
+CFLAGS := -I../include/ -fPIC -fPIE -Wall -Wsign-compare -Wpedantic -Werror -Wfatal-errors
 CFLAGS += -fstack-protector-strong
 CFLAGS += -O2 -D_FORTIFY_SOURCE=2
 CFLAGS += -Wformat -Wformat-security

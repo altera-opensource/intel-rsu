@@ -148,7 +148,7 @@ static int get_part_offset(int part_num, off_t *offset)
 	if (part_num < 0 || part_num >= spt.partitions || spt0_offset == 0)
 		return -1;
 
-	if (spt.partition[part_num].offset < spt0_offset)
+	if (spt.partition[part_num].offset < (__s64)spt0_offset)
 		return -1;
 
 	*offset = (off_t)(spt.partition[part_num].offset - spt0_offset);
@@ -163,7 +163,7 @@ static int get_part_offset(int part_num, off_t *offset)
 static int check_spt(void)
 {
 	int x;
-	int max_len = sizeof(spt.partition[0].name);
+	unsigned int max_len = sizeof(spt.partition[0].name);
 
 	int spt0_found = 0;
 	int spt1_found = 0;

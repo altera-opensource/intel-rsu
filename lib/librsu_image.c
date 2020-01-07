@@ -117,12 +117,13 @@ static int sig_block_process(struct rsu_image_state *state,	void *block,
 
 	/* Add pointers to list of identified sections */
 	for (x = 0; x < 4; x++)
-		if (ptr_blk->ptrs[x])
+		if (ptr_blk->ptrs[x]) {
 			if (state->absolute)
 				add_section(state, ptr_blk->ptrs[x] -
 					    info->offset);
 			else
 				add_section(state, ptr_blk->ptrs[x]);
+		}
 
 	return 0;
 }
@@ -165,7 +166,7 @@ static int sig_block_adjust(struct rsu_image_state *state, void *block,
 
 	/* Check pointers */
 	for (x = 0; x < 4; x++) {
-		__u64 ptr = ptr_blk->ptrs[x];
+		__s64 ptr = ptr_blk->ptrs[x];
 
 		if (!ptr)
 			continue;
@@ -269,7 +270,7 @@ static int sig_block_compare(struct rsu_image_state *state, void *ublock,
 
 		/* Update CRC in block */
 		swap_bits(block, IMAGE_BLOCK_SZ);
-		calc_crc = crc32(0, block, SIG_BLOCK_CRC_OFFS);
+		calc_crc = crc32(0, (unsigned char *)block, SIG_BLOCK_CRC_OFFS);
 		ptr_blk->crc = swap_endian32(calc_crc);
 		swap_bits(block, IMAGE_BLOCK_SZ);
 	}
@@ -295,7 +296,6 @@ int librsu_image_block_process(struct rsu_image_state *state, void *block,
 			       void *vblock, struct rsu_slot_info *info)
 {
 	__u32 magic;
-	int ret = 0;
 
 	state->offset += IMAGE_BLOCK_SZ;
 
@@ -333,6 +333,9 @@ int librsu_image_block_process(struct rsu_image_state *state, void *block,
 		if (sig_block_adjust(state, block, info))
 			return -1;
 
+		break;
+
+	case REGULAR_BLOCK:
 		break;
 	}
 

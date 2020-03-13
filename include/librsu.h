@@ -28,8 +28,8 @@
 /*
  * Macros for extracting version fields
  */
-#define RSU_VERSION_ERROR_SOURCE(v) (((v) & 0xFFFF0000) > 16)
-#define RSU_VERSION_ACMF_VERSION(v) (((v) & 0xFF00) > 8)
+#define RSU_VERSION_ERROR_SOURCE(v) (((v) & 0xFFFF0000) >> 16)
+#define RSU_VERSION_ACMF_VERSION(v) (((v) & 0xFF00) >> 8)
 #define RSU_VERSION_DCMF_VERSION(v) ((v) & 0xFF)
 
 /*

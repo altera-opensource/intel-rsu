@@ -32,7 +32,8 @@ enum rsu_clinet_command_code {
 	COMMAND_STATUS_LOG,
 	COMMAND_NOTIFY,
 	COMMAND_CLEAR_ERROR_STATUS,
-	COMMAND_RESET_RETRY_COUNTER
+	COMMAND_RESET_RETRY_COUNTER,
+	COMMAND_DISPLAY_DCMF_VERSION
 };
 
 static const struct option opts[] = {
@@ -57,6 +58,7 @@ static const struct option opts[] = {
 	{"notify", required_argument, NULL, 'n'},
 	{"clear-error-status", no_argument, NULL, 'C'},
 	{"reset-retry-counter", no_argument, NULL, 'Z'},
+	{"display-dcmf-version", no_argument, NULL, 'm'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -103,6 +105,8 @@ static void rsu_client_usage(void)
 		"clear errors from the log\n");
 	printf("%-32s  %s", "-Z|--reset-retry-counter",
 		"reset current retry counter\n");
+	printf("%-32s  %s", "-m|--display-dcmf-version",
+	       "print DCMF version\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -304,6 +308,29 @@ static int rsu_client_copy_to_file(char *file_name, int slot_num)
 	return rsu_slot_copy_to_file(slot_num, file_name);
 }
 
+/*
+ * rsu_client_display_dcmf_version() - display the version of each of the four
+ *				       DCMF copies in flash
+ *
+ * Return: 0 on success, or negative on error
+ */
+static int rsu_client_display_dcmf_version(void)
+{
+	__u32 versions[4];
+	int i, ret;
+
+	ret = rsu_dcmf_version(versions);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < 4; i++)
+		printf("DCMF%d version = %d.%d.%d\n", i,
+			   (int)DCMF_VERSION_MAJOR(versions[i]),
+			   (int)DCMF_VERSION_MINOR(versions[i]),
+			   (int)DCMF_VERSION_UPDATE(versions[i]));
+	return 0;
+}
+
 static void error_exit(char *msg)
 {
 	printf("ERROR: %s\n", msg);
@@ -333,7 +360,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZ",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZm",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -464,6 +491,11 @@ int main(int argc, char *argv[])
 				error_exit("Only one command allowed");
 			command = COMMAND_RESET_RETRY_COUNTER;
 			break;
+		case 'm':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_DISPLAY_DCMF_VERSION;
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -590,6 +622,11 @@ int main(int argc, char *argv[])
 		ret = rsu_reset_retry_counter();
 		if (ret)
 			error_exit("Failed to reset the retry counter");
+		break;
+	case COMMAND_DISPLAY_DCMF_VERSION:
+		ret = rsu_client_display_dcmf_version();
+		if (ret)
+			error_exit("Failed to display the dcmf version");
 		break;
 	default:
 		error_exit("No command: try -h for help");

@@ -32,6 +32,11 @@
 #define RSU_VERSION_ACMF_VERSION(v) (((v) & 0xFF00) >> 8)
 #define RSU_VERSION_DCMF_VERSION(v) ((v) & 0xFF)
 
+/* Macros for extracting DCMF version fields */
+#define DCMF_VERSION_MAJOR(v)  (((v) & 0xFF000000) >> 24)
+#define DCMF_VERSION_MINOR(v)  (((v) & 0x00FF0000) >> 16)
+#define DCMF_VERSION_UPDATE(v) (((v) & 0x0000FF00) >> 8)
+
 /*
  * librsu_init() - Load the configuration file and initialize internal data
  * filename: configuration file to load
@@ -362,5 +367,17 @@ int rsu_clear_error_status(void);
  * Returns 0 on success, or Error Code
  */
 int rsu_reset_retry_counter(void);
+
+/*
+ * rsu_dcmf_version() - retrieve the decision firmware version
+ * @versions: pointer to where the four DCMF versions will be stored
+ *
+ * This function is used to retrieve the version of each of the four DCMF copies
+ * in flash.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_dcmf_version(__u32 *versions);
+
 
 #endif

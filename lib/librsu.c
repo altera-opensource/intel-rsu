@@ -689,3 +689,29 @@ int rsu_reset_retry_counter(void)
 
 	return 0;
 }
+
+/*
+ * rsu_dcmf_version() - retrieve the decision firmware version
+ * @versions: pointer to where the four DCMF versions will be stored
+ *
+ * This function is used to retrieve the version of each of the four DCMF copies
+ * in flash.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_dcmf_version(__u32 *versions)
+{
+	__u64 version;
+	int i;
+	char dcmf_str[6] = {'d', 'c', 'm', 'f', '0', '\0'};
+
+	for (i = 0; i < 4; i++) {
+		if (librsu_misc_get_devattr(dcmf_str, &version))
+			return -EFILEIO;
+
+		versions[i] = version;
+		dcmf_str[4]++;
+	}
+
+	return 0;
+}

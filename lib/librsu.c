@@ -715,3 +715,22 @@ int rsu_dcmf_version(__u32 *versions)
 
 	return 0;
 }
+
+/*
+ * rsu_max_retry() - retrieve the max_retry parameter
+ * @value: pointer to where the max_retry will be stored
+ *
+ * This function is used to retrieve the max_retry parameter from flash.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_max_retry(__u8 *value)
+{
+	__u64 max_retry;
+
+	if (librsu_misc_get_devattr("max_retry", &max_retry))
+		return -EFILEIO;
+
+	*value = (__u8)max_retry;
+	return 0;
+}

@@ -33,7 +33,8 @@ enum rsu_clinet_command_code {
 	COMMAND_NOTIFY,
 	COMMAND_CLEAR_ERROR_STATUS,
 	COMMAND_RESET_RETRY_COUNTER,
-	COMMAND_DISPLAY_DCMF_VERSION
+	COMMAND_DISPLAY_DCMF_VERSION,
+	COMMAND_DISPLAY_MAX_RETRY,
 };
 
 static const struct option opts[] = {
@@ -59,6 +60,7 @@ static const struct option opts[] = {
 	{"clear-error-status", no_argument, NULL, 'C'},
 	{"reset-retry-counter", no_argument, NULL, 'Z'},
 	{"display-dcmf-version", no_argument, NULL, 'm'},
+	{"display-max-retry", no_argument, NULL, 'x'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -107,6 +109,8 @@ static void rsu_client_usage(void)
 		"reset current retry counter\n");
 	printf("%-32s  %s", "-m|--display-dcmf-version",
 	       "print DCMF version\n");
+	printf("%-32s  %s", "-x|--display-max-retry",
+	       "print max_retry parameter\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -331,6 +335,24 @@ static int rsu_client_display_dcmf_version(void)
 	return 0;
 }
 
+/*
+ * rsu_client_display_max_retry() - display the max_retry parameter
+ *
+ * Return: 0 on success, or negative on error
+ */
+static int rsu_client_display_max_retry(void)
+{
+	__u8 value;
+	int ret;
+
+	ret = rsu_max_retry(&value);
+	if (ret)
+		return ret;
+
+	printf("max_retry = %d\n", (int)value);
+	return 0;
+}
+
 static void error_exit(char *msg)
 {
 	printf("ERROR: %s\n", msg);
@@ -360,7 +382,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZm",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmx",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -496,6 +518,11 @@ int main(int argc, char *argv[])
 				error_exit("Only one command allowed");
 			command = COMMAND_DISPLAY_DCMF_VERSION;
 			break;
+		case 'x':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_DISPLAY_MAX_RETRY;
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -627,6 +654,11 @@ int main(int argc, char *argv[])
 		ret = rsu_client_display_dcmf_version();
 		if (ret)
 			error_exit("Failed to display the dcmf version");
+		break;
+	case COMMAND_DISPLAY_MAX_RETRY:
+		ret = rsu_client_display_max_retry();
+		if (ret)
+			error_exit("Failed to display the max_retry parameter");
 		break;
 	default:
 		error_exit("No command: try -h for help");

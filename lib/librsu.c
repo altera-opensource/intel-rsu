@@ -597,6 +597,66 @@ int rsu_slot_rename(int slot, char *name)
 	return 0;
 }
 
+/*
+ * rsu_slot_delete() - Delete the selected slot.
+ * slot: slot number
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_delete(int slot)
+{
+	int part_num;
+
+	if (!ll_intf)
+		return -ELIB;
+
+	if (librsu_cfg_writeprotected(slot)) {
+		librsu_log(HIGH, __func__,
+			   "Trying to delete a write protected slot");
+		return -EWRPROT;
+	}
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
+
+	if (ll_intf->priority.remove(part_num))
+		return -ELOWLEVEL;
+
+	if (ll_intf->data.erase(part_num))
+		return -ELOWLEVEL;
+
+	if (ll_intf->partition.delete(part_num))
+		return -ELOWLEVEL;
+
+	return 0;
+}
+
+/*
+ * rsu_slot_create() - Create a new slot.
+ * name: slot name
+ * address: slot start address
+ * size: slot size
+ *
+ * Returns 0 on success, or Error Code
+ */
+int rsu_slot_create(char *name, __u64 address, unsigned int size)
+{
+	if (!ll_intf)
+		return -ELIB;
+
+	if (librsu_misc_is_rsvd_name(name)) {
+		librsu_log(LOW, __func__,
+			   "error: Partition create uses a reserved name");
+		return -ENAME;
+	}
+
+	if (ll_intf->partition.create(name, address, size))
+		return -ELOWLEVEL;
+
+	return 0;
+}
+
 int rsu_status_log(struct rsu_status_info *info)
 {
 	if (!ll_intf)

@@ -19,6 +19,8 @@
 #define SPT_FLAG_RESERVED 1
 #define SPT_FLAG_READONLY 2
 
+#define SPT_MAX_PARTITIONS 127
+
 struct SUB_PARTITION_TABLE {
 	__s32 magic_number;
 	__s32 version;
@@ -30,7 +32,7 @@ struct SUB_PARTITION_TABLE {
 		__s64 offset;
 		__s32 length;
 		__s32 flags;
-	} partition[127];	/* NOTE: Max 127 to fill 4kB */
+	} partition[SPT_MAX_PARTITIONS];
 } __attribute__((__packed__));
 
 #define CPB_MAGIC_NUMBER 0x57789609

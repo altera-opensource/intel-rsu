@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAX_SLOT_NAME	15
+
 /*
  * enum rsu_clinet_command_code - supporting RSU client commands
  * COMMAND_
@@ -35,6 +37,8 @@ enum rsu_clinet_command_code {
 	COMMAND_RESET_RETRY_COUNTER,
 	COMMAND_DISPLAY_DCMF_VERSION,
 	COMMAND_DISPLAY_MAX_RETRY,
+	COMMAND_SLOT_CREATE,
+	COMMAND_SLOT_DELETE
 };
 
 static const struct option opts[] = {
@@ -61,6 +65,10 @@ static const struct option opts[] = {
 	{"reset-retry-counter", no_argument, NULL, 'Z'},
 	{"display-dcmf-version", no_argument, NULL, 'm'},
 	{"display-max-retry", no_argument, NULL, 'x'},
+	{"address", required_argument, NULL, 'S'},
+	{"length", required_argument, NULL, 'L'},
+	{"create-slot", required_argument, NULL, 't'},
+	{"delete-slot", required_argument, NULL, 'd'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -111,6 +119,10 @@ static void rsu_client_usage(void)
 	       "print DCMF version\n");
 	printf("%-32s  %s", "-x|--display-max-retry",
 	       "print max_retry parameter\n");
+	printf("%-32s  %s", "-t|--create-slot slot_name -S|--address slot_address -L|--length slot_size",
+		"create a new slot using unallocated space\n");
+	printf("%-32s  %s", "-d|--delete-slot slot_num",
+		"delete selected slot, freeing up allocated space\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -365,6 +377,10 @@ int main(int argc, char *argv[])
 	int c;
 	int index = 0;
 	int slot_num = -1;
+	int slot_address = -1;
+	int slot_size = -1;
+	char slot_name[MAX_SLOT_NAME + 1] = "";
+	char *endptr;
 	int notify_value = -1;
 	enum rsu_clinet_command_code command = COMMAND_NONE;
 	char *filename = NULL;
@@ -382,7 +398,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmx",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmxd:S:L:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -523,6 +539,37 @@ int main(int argc, char *argv[])
 				error_exit("Only one command allowed");
 			command = COMMAND_DISPLAY_MAX_RETRY;
 			break;
+		case 't':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_SLOT_CREATE;
+			strncpy(slot_name, optarg, MAX_SLOT_NAME);
+			slot_name[MAX_SLOT_NAME] = '\0';
+			break;
+		case 'd':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			if (slot_num >= 0)
+				error_exit("Slot number already set");
+			command = COMMAND_SLOT_DELETE;
+			slot_num = strtol(optarg, &endptr, 0);
+			if (*endptr)
+				error_exit("Invalid slot number");
+			break;
+		case 'S':
+			if (slot_address >= 0)
+				error_exit("Slot address already set");
+			slot_address = strtol(optarg, &endptr, 0);
+			if (*endptr)
+				error_exit("Invalid slot address");
+			break;
+		case 'L':
+			if (slot_size >= 0)
+				error_exit("Slot size already set");
+			slot_size = strtol(optarg, &endptr, 0);
+			if (*endptr)
+				error_exit("Invalid slot size");
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -659,6 +706,20 @@ int main(int argc, char *argv[])
 		ret = rsu_client_display_max_retry();
 		if (ret)
 			error_exit("Failed to display the max_retry parameter");
+		break;
+	case  COMMAND_SLOT_CREATE:
+		if (slot_address < 0)
+			error_exit("Slot address value must be set");
+		if (slot_size < 0)
+			error_exit("Slot size value must be set");
+		ret = rsu_slot_create(slot_name, slot_address, slot_size);
+		if (ret)
+			error_exit("Failed to create the slot");
+		break;
+	case  COMMAND_SLOT_DELETE:
+		ret = rsu_slot_delete(slot_num);
+		if (ret)
+			error_exit("Failed to delete the slot");
 		break;
 	default:
 		error_exit("No command: try -h for help");

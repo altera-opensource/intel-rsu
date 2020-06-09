@@ -18,6 +18,8 @@ struct librsu_ll_intf {
 		int (*reserved)(int part_num);
 		int (*readonly)(int part_num);
 		int (*rename)(int part_num, char *name);
+		int (*delete)(int part_num);
+		int (*create)(char *name, __u64 start, unsigned int size);
 	} partition;
 
 	struct {

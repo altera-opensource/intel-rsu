@@ -820,6 +820,110 @@ static int partition_rename(int part_num, char *name)
 	return 0;
 }
 
+/*
+ * partition_delete() - Delete a partition.
+ * part_num: partition number
+ *
+ * Returns 0 on success, or Error Code
+ */
+static int partition_delete(int part_num)
+{
+	int x;
+
+	if (part_num < 0 || part_num >= spt.partitions) {
+		librsu_log(LOW, __func__,
+			   "error: Invalid partition number");
+		return -1;
+	}
+
+	for (x = part_num; x < spt.partitions; x++)
+		spt.partition[x] = spt.partition[x + 1];
+
+	spt.partitions--;
+
+	if (writeback_spt())
+		return -1;
+
+	if (load_spt())
+		return -1;
+
+	return 0;
+}
+
+/*
+ * partition_create() - Create a new partition.
+ * name: partition name
+ * start: partition start address
+ * size: partition size
+ *
+ * Returns 0 on success, or Error Code
+ */
+static int partition_create(char *name, __u64 start, unsigned int size)
+{
+	int x;
+	__u64 end = start + size;
+
+	if (size % dev_info.erasesize) {
+		librsu_log(LOW, __func__, "error: Invalid partition size");
+		return -1;
+	}
+
+	if (start % dev_info.erasesize) {
+		librsu_log(LOW, __func__, "error: Invalid partition address");
+		return -1;
+	}
+
+	if (strnlen(name, sizeof(spt.partition[0].name)) >=
+	    sizeof(spt.partition[0].name)) {
+		librsu_log(LOW, __func__,
+			   "error: Partition name is too long - limited to %i",
+			   sizeof(spt.partition[0].name) - 1);
+		return -1;
+	}
+
+	for (x = 0; x < spt.partitions; x++) {
+		if (strncmp(spt.partition[x].name, name,
+			    sizeof(spt.partition[0].name) - 1) == 0) {
+			librsu_log(LOW, __func__,
+				   "error: Partition name already in use");
+			return -1;
+		}
+	}
+
+	if (spt.partitions == SPT_MAX_PARTITIONS) {
+		librsu_log(LOW, __func__, "error: Partition table is full");
+		return -1;
+	}
+
+	for (x = 0; x < spt.partitions; x++) {
+		__u64 pstart = spt.partition[x].offset;
+		__u64 pend = spt.partition[x].offset +
+			     spt.partition[x].length;
+
+		if ((start < pend) && (end > pstart)) {
+			librsu_log(LOW, __func__, "error: Partition overlap");
+			return -1;
+		}
+	}
+
+	SAFE_STRCPY(spt.partition[spt.partitions].name,
+		    sizeof(spt.partition[0].name), name,
+		    sizeof(spt.partition[0].name));
+	spt.partition[spt.partitions].offset = start;
+	spt.partition[spt.partitions].length = size;
+	spt.partition[spt.partitions].flags = 0;
+
+	spt.partitions++;
+
+	if (writeback_spt())
+		return -1;
+
+	if (load_spt())
+		return -1;
+
+	return 0;
+}
+
 static struct librsu_ll_intf qspi_ll_intf = {
 	.close = ll_close,
 
@@ -830,6 +934,8 @@ static struct librsu_ll_intf qspi_ll_intf = {
 	.partition.reserved = partition_reserved,
 	.partition.readonly = partition_readonly,
 	.partition.rename = partition_rename,
+	.partition.delete = partition_delete,
+	.partition.create = partition_create,
 
 	.priority.get = priority_get,
 	.priority.add = priority_add,

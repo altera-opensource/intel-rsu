@@ -33,6 +33,13 @@ struct librsu_ll_intf {
 		int (*write)(int part_num, int offset, int bytes, void *buf);
 		int (*erase)(int part_num);
 	} data;
+
+	struct {
+		int (*empty)(void);
+		int (*restore)(char *name);
+		int (*save)(char *name);
+		int (*corrupted)(void);
+	} cpb_ops;
 };
 
 int librsu_ll_open_datafile(struct librsu_ll_intf **intf);

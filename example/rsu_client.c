@@ -39,7 +39,10 @@ enum rsu_clinet_command_code {
 	COMMAND_DISPLAY_DCMF_STATUS,
 	COMMAND_DISPLAY_MAX_RETRY,
 	COMMAND_SLOT_CREATE,
-	COMMAND_SLOT_DELETE
+	COMMAND_SLOT_DELETE,
+	COMMAND_CREATE_EMPTY_CPB,
+	COMMAND_RESTORE_CPB,
+	COMMAND_SAVE_CPB
 };
 
 static const struct option opts[] = {
@@ -71,6 +74,9 @@ static const struct option opts[] = {
 	{"length", required_argument, NULL, 'L'},
 	{"create-slot", required_argument, NULL, 't'},
 	{"delete-slot", required_argument, NULL, 'd'},
+	{"create-empty-cpb", no_argument, NULL, 'b'},
+	{"restore-cpb", required_argument, NULL, 'B'},
+	{"save-cpb", required_argument, NULL, 'P'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -127,6 +133,9 @@ static void rsu_client_usage(void)
 		"create a new slot using unallocated space\n");
 	printf("%-32s  %s", "-d|--delete-slot slot_num",
 		"delete selected slot, freeing up allocated space\n");
+	printf("%-32s  %s", "-b|--create-empty-cpb", "create a empty cpb\n");
+	printf("%-32s  %s", "-B|--restore-cpb file_name", "restore cpb from a file\n");
+	printf("%-32s  %s", "-P|--save-cpb file_name", "save cpb to a file\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -423,7 +432,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:S:L:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:bB:P:S:L:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -600,6 +609,23 @@ int main(int argc, char *argv[])
 			if (*endptr)
 				error_exit("Invalid slot size");
 			break;
+		case 'b':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_CREATE_EMPTY_CPB;
+			break;
+		case 'B':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_RESTORE_CPB;
+			filename = optarg;
+			break;
+		case 'P':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_SAVE_CPB;
+			filename = optarg;
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -755,6 +781,21 @@ int main(int argc, char *argv[])
 		ret = rsu_slot_delete(slot_num);
 		if (ret)
 			error_exit("Failed to delete the slot");
+		break;
+	case COMMAND_CREATE_EMPTY_CPB:
+		ret = rsu_create_empty_cpb();
+		if (ret)
+			error_exit("Failed to create a empty cpb");
+		break;
+	case COMMAND_RESTORE_CPB:
+		ret = rsu_restore_cpb(filename);
+		if (ret)
+			error_exit("Failed to restore cpb");
+		break;
+	case COMMAND_SAVE_CPB:
+		ret = rsu_save_cpb(filename);
+		if (ret)
+			error_exit("Failed to save cpb");
 		break;
 	default:
 		error_exit("No command: try -h for help");

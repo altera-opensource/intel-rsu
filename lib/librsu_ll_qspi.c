@@ -11,7 +11,15 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <zlib.h>
+
+#define SPB_SIZE		4096
+#define CPB_SIZE		4096
+#define CPB_IMAGE_PTR_OFFSET	24
+#define CPB_IMAGE_PTR_NSLOTS	508
 
 static int dev_file = -1;
 static struct mtd_info_user dev_info;
@@ -406,10 +414,22 @@ static int writeback_spt(void)
 
 static union CMF_POINTER_BLOCK cpb;
 static CMF_POINTER *cpb_slots;
+static int cpb0_part = -1;
+static int cpb1_part = -1;
+
+/*
+ * set to cpb_corrupted flag to true in below case:
+ * 1). reported by firmware
+ * 2). both CPBs are not same
+ */
+static bool cpb_corrupted;
 
 #define ERASED_ENTRY ((__s64)-1)
 #define SPENT_ENTRY ((__s64)0)
 
+/**
+ * check CPB other header value and image pointer
+ */
 static int check_cpb(void)
 {
 	int x, y;
@@ -423,36 +443,145 @@ static int check_cpb(void)
 	}
 
 	for (x = 0; x < cpb.header.image_ptr_slots; x++) {
-		if (cpb_slots[x] != ERASED_ENTRY &&
-		    cpb_slots[x] != SPENT_ENTRY) {
-			for (y = 0; y < spt.partitions; y++) {
-				if (cpb_slots[x] == spt.partition[y].offset) {
-					librsu_log(HIGH, __func__,
-						   "cpb_slots[%i] = %s", x,
-						   spt.partition[y].name);
-					break;
-				}
-			}
-			if (y >= spt.partitions)
+		if (cpb_slots[x] == ERASED_ENTRY ||
+		    cpb_slots[x] == SPENT_ENTRY)
+			continue;
+
+		for (y = 0; y < spt.partitions; y++) {
+			if (cpb_slots[x] == spt.partition[y].offset) {
 				librsu_log(HIGH, __func__,
-					   "cpb_slots[%i] = %016llX ???", x,
-					   cpb_slots[x]);
+					   "cpb_slots[%i] = %s", x,
+					   spt.partition[y].name);
+				break;
+			}
+		}
+
+		if (y >= spt.partitions) {
+			librsu_log(LOW, __func__,
+				   "error: CPB is not included in SPT");
+			librsu_log(HIGH, __func__,
+				   "cpb_slots[%i] = %016llX ???", x,
+				   cpb_slots[x]);
+			return -1;
+		}
+
+		if (spt.partition[y].flags & SPT_FLAG_RESERVED) {
+			librsu_log(LOW, __func__,
+				   "CPB is included in SPT but reserved\n");
+			return -1;
 		}
 	}
 
 	return 0;
 }
 
+static int check_both_cpb(void)
+{
+	int ret;
+	char *cpb0_data;
+	char *cpb1_data;
+
+	cpb0_data = (char *)malloc(CPB_SIZE);
+	if (!cpb0_data) {
+		librsu_log(LOW, __func__, "failed to allocate cpb0_data");
+		return -1;
+	}
+
+	cpb1_data = (char *)malloc(CPB_SIZE);
+	if (!cpb1_data) {
+		librsu_log(LOW, __func__, "failed to allocate cpb1_data");
+		free(cpb0_data);
+		return -1;
+	}
+
+	ret = read_part(cpb0_part, 0, cpb0_data, CPB_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read cpb0_data");
+		goto ops_error;
+	}
+
+	ret = read_part(cpb1_part, 0, cpb1_data, CPB_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read cpb1_data");
+		goto ops_error;
+	}
+
+	ret = memcmp(cpb0_data, cpb1_data, CPB_SIZE);
+
+ops_error:
+	free(cpb1_data);
+	free(cpb0_data);
+	return ret;
+}
+
+static int save_cpb_to_file(char *name)
+{
+	FILE *fp;
+	char *cpb_data;
+	int ret;
+	int write_size;
+	__u32 calc_crc;
+
+	fp = fopen(name, "w");
+	if (!fp) {
+		librsu_log(LOW, __func__,
+			   "failed to open file for saving CPB");
+		return -1;
+	}
+
+	cpb_data = (char *)malloc(CPB_SIZE);
+	if (!cpb_data) {
+		librsu_log(LOW, __func__, "failed to allocate cpb_data");
+		fclose(fp);
+		return -1;
+	}
+
+	ret = read_part(cpb0_part, 0, cpb_data, CPB_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read CPB data");
+		goto ops_err;
+	}
+
+	calc_crc = crc32(0, (void *)cpb_data, CPB_SIZE);
+	librsu_log(HIGH, __func__, "calc_crc is 0x%x", calc_crc);
+
+	write_size = fwrite(cpb_data, 1, CPB_SIZE, fp);
+	if (write_size != CPB_SIZE) {
+		librsu_log(LOW, __func__, "failed to write %d CPB data",
+			   CPB_SIZE);
+		ret = -1;
+		goto ops_err;
+	}
+	write_size = fwrite(&calc_crc, 1, sizeof(calc_crc), fp);
+	if (write_size != sizeof(calc_crc)) {
+		librsu_log(LOW, __func__, "failed to write %d calc_crc",
+			   sizeof(calc_crc));
+		ret = -1;
+	}
+
+ops_err:
+	free(cpb_data);
+	fclose(fp);
+	return ret;
+}
+
+static int corrupted_cpb(void)
+{
+	return cpb_corrupted;
+}
+
 /**
  * Check CPB1 and then CPB0. If they both pass checks, use CPB0.
- * If only one passes, retore the bad one. If both are bad, fail.
+ * If only one passes, retore the bad one. If both are bad, set
+ * CPB_CORRUPTED flag to true.
+ *
+ * When CPB_CORRUPTED flag is true, all CPB operations are blocked
+ * except restore_cpb and empty_cpb.
  */
 static int load_cpb(void)
 {
 	int x;
-	int cpb0_part = -1;
 	int cpb0_good = 0;
-	int cpb1_part = -1;
 	int cpb1_good = 0;
 
 	for (x = 0; x < spt.partitions; x++) {
@@ -470,7 +599,6 @@ static int load_cpb(void)
 		return -1;
 	}
 
-	librsu_log(HIGH, __func__, "CPB1");
 	if (read_part(cpb1_part, 0, &cpb, sizeof(cpb)) == 0 &&
 	    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
 		cpb_slots = (CMF_POINTER *)
@@ -481,7 +609,6 @@ static int load_cpb(void)
 		librsu_log(MED, __func__, "Bad CPB1 is bad");
 	}
 
-	librsu_log(HIGH, __func__, "CPB0");
 	if (read_part(cpb0_part, 0, &cpb, sizeof(cpb)) == 0 &&
 	    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
 		cpb_slots = (CMF_POINTER *)
@@ -493,6 +620,12 @@ static int load_cpb(void)
 	}
 
 	if (cpb0_good && cpb1_good) {
+		if (check_both_cpb()) {
+			librsu_log(LOW, __func__,
+				   "error: unmatched CPB0/1 data");
+			cpb_corrupted = true;
+			return -1;
+		}
 		cpb_slots = (CMF_POINTER *)
 		    &cpb.data[cpb.header.image_ptr_offset];
 		return 0;
@@ -558,7 +691,8 @@ static int load_cpb(void)
 		return 0;
 	}
 
-	librsu_log(LOW, __func__, "error: No valid CPB0 or CPB1 found");
+	cpb_corrupted = true;
+	librsu_log(LOW, __func__, "error: found both corrupted CPBs");
 
 	return -1;
 }
@@ -634,6 +768,120 @@ static int writeback_cpb(void)
 	return 0;
 }
 
+static int empty_cpb(void)
+{
+	int ret;
+	struct cpb_header {
+		__s32 magic_number;
+		__s32 header_size;
+		__s32 cpb_size;
+		__s32 cpb_reserved;
+		__s32 image_ptr_offset;
+		__s32 image_ptr_slots;
+	};
+
+	struct cpb_header *c_header;
+
+	c_header = (struct cpb_header *)malloc(sizeof(struct cpb_header));
+	if (!c_header) {
+		librsu_log(LOW, __func__, "failed to allocate cpb_header");
+		return -1;
+	}
+
+	c_header->magic_number = CPB_MAGIC_NUMBER;
+	c_header->header_size = CPB_HEADER_SIZE;
+	c_header->cpb_size = CPB_SIZE;
+	c_header->cpb_reserved = 0;
+	c_header->image_ptr_offset = CPB_IMAGE_PTR_OFFSET;
+	c_header->image_ptr_slots = CPB_IMAGE_PTR_NSLOTS;
+
+	memset(&cpb, -1, CPB_SIZE);
+	memcpy(&cpb, c_header, (__u32)sizeof(c_header));
+
+	ret = writeback_cpb();
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to write back cpb\n");
+		goto ops_error;
+	}
+
+	cpb_slots = (CMF_POINTER *)&cpb.data[cpb.header.image_ptr_offset];
+	cpb_corrupted = false;
+
+ops_error:
+	free(c_header);
+	return ret;
+}
+
+static int restore_cpb_from_file(char *name)
+{
+	FILE *fp;
+	char *cpb_data;
+	__u32 crc_from_saved_file;
+	__u32 calc_crc;
+	__u32 magic_number;
+	int ret;
+
+	fp = fopen(name, "r");
+	if (!fp) {
+		librsu_log(LOW, __func__,
+			    "failed to open file for restoring CPB");
+		return -1;
+	}
+
+	cpb_data = (char *)malloc(CPB_SIZE);
+	if (!cpb_data) {
+		librsu_log(LOW, __func__, "failed to allocate cpb_data");
+		return -1;
+	}
+
+	ret = fread(cpb_data, CPB_SIZE, 1, fp);
+	if (!ret) {
+		librsu_log(LOW, __func__, "failed to read");
+		ret = -1;
+		goto ops_error;
+	}
+
+	librsu_log(HIGH, __func__, "read size is %d", ret);
+	calc_crc = crc32(0, (void *)cpb_data, CPB_SIZE);
+	fseek(fp, CPB_SIZE, SEEK_SET);
+	ret = fread(&crc_from_saved_file, sizeof(crc_from_saved_file), 1, fp);
+	if (!ret) {
+		librsu_log(LOW, __func__, "failed to read");
+		ret = -1;
+		goto ops_error;
+	}
+	librsu_log(HIGH, __func__, "read size is %d", ret);
+	fclose(fp);
+
+	if (crc_from_saved_file != calc_crc) {
+		librsu_log(LOW, __func__, "saved file is corrupted");
+		ret = -1;
+		goto ops_error;
+	}
+
+	memcpy(&magic_number, cpb_data, sizeof(magic_number));
+	if (magic_number != CPB_MAGIC_NUMBER) {
+		librsu_log(LOW, __func__,
+			   "failure due to mismatch magic number");
+		ret = -1;
+		goto ops_error;
+	}
+
+	memcpy(&cpb, cpb_data, CPB_SIZE);
+	ret = writeback_cpb();
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to write back cpb\n");
+		goto ops_error;
+	}
+
+	cpb_slots = (CMF_POINTER *)&cpb.data[cpb.header.image_ptr_offset];
+	cpb_corrupted = false;
+
+ops_error:
+	free(cpb_data);
+	return ret;
+}
+
 static void ll_close(void)
 {
 	if (dev_file >= 0)
@@ -643,6 +891,9 @@ static void ll_close(void)
 	spt0_offset = 0;
 	spt.partitions = 0;
 	cpb.header.image_ptr_slots = 0;
+	cpb0_part = -1;
+	cpb1_part = -1;
+	cpb_corrupted = false;
 }
 
 static int partition_count(void)
@@ -943,7 +1194,12 @@ static struct librsu_ll_intf qspi_ll_intf = {
 
 	.data.read = data_read,
 	.data.write = data_write,
-	.data.erase = data_erase
+	.data.erase = data_erase,
+
+	.cpb_ops.empty = empty_cpb,
+	.cpb_ops.restore = restore_cpb_from_file,
+	.cpb_ops.save = save_cpb_to_file,
+	.cpb_ops.corrupted = corrupted_cpb
 };
 
 int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
@@ -1014,7 +1270,7 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 		return -1;
 	}
 
-	if (load_cpb()) {
+	if (load_cpb() && !cpb_corrupted) {
 		librsu_log(LOW, __func__, "error: Bad CPB");
 		ll_close();
 		return -1;

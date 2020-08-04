@@ -43,7 +43,7 @@ union CMF_POINTER_BLOCK {
 		__s32 magic_number;
 		__s32 header_size;
 		__s32 cpb_size;
-		__s32 cpb_backup_offset;
+		__s32 cpb_reserved;
 		__s32 image_ptr_offset;
 		__s32 image_ptr_slots;
 	} header;

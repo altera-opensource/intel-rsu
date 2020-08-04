@@ -24,7 +24,7 @@
 #define ELOWLEVEL	12
 #define EWRPROT		13
 #define EARGS		14
-
+#define ECORRUPTED_CPB	15
 /*
  * Macros for extracting version fields
  */
@@ -422,4 +422,33 @@ int rsu_max_retry(__u8 *value);
  */
 int rsu_dcmf_status(int *status);
 
+/*
+ * rsu_save_cpb() - save cpb to the file
+ * @name: the name of file which cpb is saved to
+ *
+ * This function is used to save the working CPB to a file.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_save_cpb(char *name);
+
+/*
+ * rsu_create_empty_cpb() - create a header only cpb
+ *
+ * This function is used to create a empty CPB, which include CPB header
+ * only.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_create_empty_cpb(void);
+
+/*
+ * rsu_restore_cpb() - restore the cpb
+ * @name: the name of file which cpb is restored from
+ *
+ * This function is used to restore the CPB from a saved file
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_restore_cpb(char *name);
 #endif

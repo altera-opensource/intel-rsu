@@ -87,6 +87,18 @@ void librsu_exit(void)
 	librsu_cfg_reset();
 }
 
+/**
+ * rsu_cpb_corrupted_info() - corrupted cpb warning message
+ *
+ * The function is used to output warning messages to user
+ */
+void rsu_cpb_corrupted_info(void)
+{
+	librsu_log(LOW, __func__, "corrupted CPB --");
+	librsu_log(LOW, __func__, "run rsu_client create-empty-cpb or ");
+	librsu_log(LOW, __func__, "rsu_client restore_cpb <file_name> first\n");
+}
+
 int rsu_slot_count(void)
 {
 	int partitions;
@@ -142,6 +154,11 @@ int rsu_slot_get_info(int slot, struct rsu_slot_info *info)
 	if (!info)
 		return -EARGS;
 
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
@@ -177,6 +194,11 @@ int rsu_slot_priority(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
@@ -190,6 +212,11 @@ int rsu_slot_erase(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	if (librsu_cfg_writeprotected(slot)) {
 		librsu_log(HIGH, __func__,
@@ -213,6 +240,11 @@ int rsu_slot_erase(int slot)
 int rsu_slot_program_buf(int slot, void *buf, int size)
 {
 	int rtn;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	if (librsu_cb_buf_init(buf, size)) {
 		librsu_log(HIGH, __func__, "Bad buf/size arguments");
@@ -239,6 +271,11 @@ int rsu_slot_program_factory_update_buf(int slot, void *buf, int size)
 int rsu_slot_program_file(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	if (librsu_cb_file_init(filename)) {
 		librsu_log(HIGH, __func__, "Unable to open file '%s'",
@@ -300,6 +337,11 @@ int rsu_slot_verify_buf(int slot, void *buf, int size)
 {
 	int rtn;
 
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
 	if (librsu_cb_buf_init(buf, size)) {
 		librsu_log(HIGH, __func__, "Bad buf/size arguments");
 		return -EARGS;
@@ -315,6 +357,11 @@ int rsu_slot_verify_buf(int slot, void *buf, int size)
 int rsu_slot_verify_file(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	if (librsu_cb_file_init(filename)) {
 		librsu_log(HIGH, __func__, "Unable to open file '%s'",
@@ -402,6 +449,11 @@ int rsu_slot_copy_to_file(int slot, char *filename)
 	if (part_num < 0)
 		return -ESLOTNUM;
 
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
 	if (ll_intf->priority.get(part_num) <= 0) {
 		librsu_log(HIGH, __func__, "Trying to read an erased slot");
 		return -EERASE;
@@ -485,6 +537,11 @@ int rsu_slot_disable(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
@@ -501,6 +558,11 @@ int rsu_slot_enable(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -522,6 +584,11 @@ int rsu_slot_load_after_reboot(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -609,6 +676,11 @@ int rsu_slot_delete(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
 
 	if (librsu_cfg_writeprotected(slot)) {
 		librsu_log(HIGH, __func__,
@@ -829,4 +901,47 @@ int rsu_dcmf_status(int *status)
 	}
 
 	return 0;
+}
+
+/**
+ * rsu_create_empty_cpb() - create a empty cpb
+ *
+ * This function is used to create a empty cpb with the header field only
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_create_empty_cpb(void)
+{
+	return ll_intf->cpb_ops.empty();
+}
+
+/**
+ * rsu_restore_cpb() - restore cpb from a file
+ * @filename: the name of file which cpb is restored from
+ *
+ * This function is used to restore cpb from a file
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_restore_cpb(char *filename)
+{
+	return ll_intf->cpb_ops.restore(filename);
+}
+
+/**
+ * rsu_save_cpb() - save cpb to file
+ * @filename: the name of file which cpb is saved to
+ *
+ * This function is used to save cpb to a file
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_save_cpb(char *filename)
+{
+	if (ll_intf->cpb_ops.corrupted()) {
+		rsu_cpb_corrupted_info();
+		return -ECORRUPTED_CPB;
+	}
+
+	return ll_intf->cpb_ops.save(filename);
 }

@@ -99,6 +99,17 @@ void rsu_cpb_corrupted_info(void)
 	librsu_log(LOW, __func__, "rsu_client restore_cpb <file_name> first\n");
 }
 
+/**
+ * rsu_spt_corrupted_info() - corrupted spt warning message
+ *
+ * The function is used to output warning messages to user
+ */
+void rsu_spt_corrupted_info(void)
+{
+	librsu_log(LOW, __func__, "corrupted SPT --");
+	librsu_log(LOW, __func__, "run rsu_client restore-spt <file_name> first\n");
+}
+
 int rsu_slot_count(void)
 {
 	int partitions;
@@ -107,6 +118,11 @@ int rsu_slot_count(void)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	partitions = ll_intf->partition.count();
 
@@ -129,6 +145,11 @@ int rsu_slot_by_name(char *name)
 
 	if (!name)
 		return -EARGS;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	partitions = ll_intf->partition.count();
 
@@ -153,6 +174,11 @@ int rsu_slot_get_info(int slot, struct rsu_slot_info *info)
 
 	if (!info)
 		return -EARGS;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -180,6 +206,11 @@ int rsu_slot_size(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
@@ -193,6 +224,11 @@ int rsu_slot_priority(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -212,6 +248,11 @@ int rsu_slot_erase(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -240,6 +281,11 @@ int rsu_slot_erase(int slot)
 int rsu_slot_program_buf(int slot, void *buf, int size)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -271,6 +317,11 @@ int rsu_slot_program_factory_update_buf(int slot, void *buf, int size)
 int rsu_slot_program_file(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -304,6 +355,11 @@ int rsu_slot_program_buf_raw(int slot, void *buf, int size)
 {
 	int rtn;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	if (librsu_cb_buf_init(buf, size)) {
 		librsu_log(HIGH, __func__, "Bad buf/size arguments");
 		return -EARGS;
@@ -319,6 +375,11 @@ int rsu_slot_program_buf_raw(int slot, void *buf, int size)
 int rsu_slot_program_file_raw(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (librsu_cb_file_init(filename)) {
 		librsu_log(HIGH, __func__, "Unable to open file '%s'",
@@ -336,6 +397,11 @@ int rsu_slot_program_file_raw(int slot, char *filename)
 int rsu_slot_verify_buf(int slot, void *buf, int size)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -357,6 +423,11 @@ int rsu_slot_verify_buf(int slot, void *buf, int size)
 int rsu_slot_verify_file(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -380,6 +451,11 @@ int rsu_slot_verify_buf_raw(int slot, void *buf, int size)
 {
 	int rtn;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	if (librsu_cb_buf_init(buf, size)) {
 		librsu_log(HIGH, __func__, "Bad buf/size arguments");
 		return -EARGS;
@@ -395,6 +471,11 @@ int rsu_slot_verify_buf_raw(int slot, void *buf, int size)
 int rsu_slot_verify_file_raw(int slot, char *filename)
 {
 	int rtn;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (librsu_cb_file_init(filename)) {
 		librsu_log(HIGH, __func__, "Unable to open file '%s'",
@@ -448,6 +529,11 @@ int rsu_slot_copy_to_file(int slot, char *filename)
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -537,10 +623,19 @@ int rsu_slot_disable(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
 		return -ECORRUPTED_CPB;
 	}
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -559,10 +654,19 @@ int rsu_slot_enable(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
 		return -ECORRUPTED_CPB;
 	}
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -585,10 +689,19 @@ int rsu_slot_load_after_reboot(int slot)
 	if (!ll_intf)
 		return -ELIB;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
 		return -ECORRUPTED_CPB;
 	}
+
+	part_num = librsu_misc_slot2part(ll_intf, slot);
+	if (part_num < 0)
+		return -ESLOTNUM;
 
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
@@ -617,6 +730,11 @@ int rsu_slot_load_factory_after_reboot(void)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	partitions = ll_intf->partition.count();
 
@@ -648,6 +766,11 @@ int rsu_slot_rename(int slot, char *name)
 	if (!name)
 		return -EARGS;
 
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
 	part_num = librsu_misc_slot2part(ll_intf, slot);
 	if (part_num < 0)
 		return -ESLOTNUM;
@@ -676,6 +799,11 @@ int rsu_slot_delete(int slot)
 
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (ll_intf->cpb_ops.corrupted()) {
 		rsu_cpb_corrupted_info();
@@ -716,6 +844,11 @@ int rsu_slot_create(char *name, __u64 address, unsigned int size)
 {
 	if (!ll_intf)
 		return -ELIB;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
 
 	if (librsu_misc_is_rsvd_name(name)) {
 		librsu_log(LOW, __func__,
@@ -901,6 +1034,21 @@ int rsu_dcmf_status(int *status)
 	}
 
 	return 0;
+}
+
+int rsu_restore_spt(char *filename)
+{
+	return ll_intf->spt_ops.restore(filename);
+}
+
+int rsu_save_spt(char *filename)
+{
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
+	return ll_intf->spt_ops.save(filename);
 }
 
 /**

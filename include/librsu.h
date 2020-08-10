@@ -25,6 +25,8 @@
 #define EWRPROT		13
 #define EARGS		14
 #define ECORRUPTED_CPB	15
+#define ECORRUPTED_SPT	16
+
 /*
  * Macros for extracting version fields
  */
@@ -421,6 +423,26 @@ int rsu_max_retry(__u8 *value);
  * Returns: 0 on success, or error code
  */
 int rsu_dcmf_status(int *status);
+
+/*
+ * rsu_save_spt() - save spt to the file
+ * @name: file name which SPT will be saved to
+ *
+ * This function is used to save the working SPT to a file.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_save_spt(char *name);
+
+/*
+ * rsu_restore_spt() - restore spt from the file
+ * @name: file name which SPT will be restored from
+ *
+ * This function is used to restore the SPT from a saved file.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_restore_spt(char *name);
 
 /*
  * rsu_save_cpb() - save cpb to the file

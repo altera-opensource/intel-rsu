@@ -16,7 +16,7 @@
 #include <unistd.h>
 #include <zlib.h>
 
-#define SPB_SIZE		4096
+#define SPT_SIZE		4096
 #define CPB_SIZE		4096
 #define CPB_IMAGE_PTR_OFFSET	24
 #define CPB_IMAGE_PTR_NSLOTS	508
@@ -143,6 +143,63 @@ static int erase_dev(off_t offset, int len)
 
 static struct SUB_PARTITION_TABLE spt;
 static __u64 spt0_offset;
+static bool spt_corrupted;
+
+static int save_spt_to_file(char *name)
+{
+	FILE *fp;
+	char *spt_data;
+	int ret;
+	int write_size;
+	__u32 calc_crc;
+
+	fp = fopen(name, "w");
+	if (!fp) {
+		librsu_log(LOW, __func__,
+			   "failed to open file for saving SPT");
+		return -1;
+	}
+
+	spt_data = (char *)malloc(SPT_SIZE);
+	if (!spt_data) {
+		librsu_log(LOW, __func__, "failed to allocate spt_data");
+		fclose(fp);
+		return -1;
+	}
+
+	ret = read_dev(SPT0_OFFSET, spt_data, SPT_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read SPT data");
+		goto ops_error;
+	}
+
+	calc_crc = crc32(0, (void *)spt_data, SPT_SIZE);
+	librsu_log(HIGH, __func__, "calc_crc is 0x%x", calc_crc);
+
+	write_size = fwrite(spt_data, 1, SPT_SIZE, fp);
+	if (write_size != SPT_SIZE) {
+		librsu_log(LOW, __func__, "failed to write %d SPT data",
+			   SPT_SIZE);
+		ret = -1;
+		goto ops_error;
+	}
+	write_size = fwrite(&calc_crc, 1, sizeof(calc_crc), fp);
+	if (write_size != sizeof(calc_crc)) {
+		librsu_log(LOW, __func__, "failed to write %d calc_crc",
+			   sizeof(calc_crc));
+		ret = -1;
+	}
+
+ops_error:
+	fclose(fp);
+	free(spt_data);
+	return ret;
+}
+
+static int corrupted_spt(void)
+{
+	return spt_corrupted;
+}
 
 /**
  * The SPT offset entry is the partition offset within the flash.  The MTD
@@ -171,6 +228,7 @@ static int get_part_offset(int part_num, off_t *offset)
 static int check_spt(void)
 {
 	int x;
+	int y;
 	unsigned int max_len = sizeof(spt.partition[0].name);
 
 	int spt0_found = 0;
@@ -190,14 +248,56 @@ static int check_spt(void)
 			   LIBRSU_VER);
 	}
 
+	if (spt.partitions > SPT_MAX_PARTITIONS) {
+		librsu_log(LOW, __func__, "bigger than max partition\n");
+		return -1;
+	}
+
 	for (x = 0; x < spt.partitions; x++) {
 		if (strnlen(spt.partition[x].name, max_len) >= max_len)
 			spt.partition[x].name[max_len - 1] = '\0';
+
+		librsu_log(HIGH, __func__,
+			   "offset=0x%016llx, length=0x%08x\n",
+			   spt.partition[x].offset,
+			   spt.partition[x].length);
+
+		/* check if the partition is overlap */
+		__u64 s_start = spt.partition[x].offset;
+		__u64 s_end = spt.partition[x].offset + spt.partition[x].length;
+
+		for (y = 0; y < spt.partitions; y++) {
+			if (x == y)
+				continue;
+
+			/*
+			 * don't allow the same partition name to appear
+			 * more than once
+			 */
+			if (!(strcmp(spt.partition[x].name,
+				     spt.partition[y].name))) {
+				librsu_log(LOW, __func__,
+					   "partition name appears more than once");
+				return -1;
+			}
+
+			__u64 d_start = spt.partition[y].offset;
+			__u64 d_end = spt.partition[y].offset +
+				      spt.partition[y].length;
+
+			if ((s_start < d_end) && (s_end > d_start)) {
+				librsu_log(LOW, __func__,
+					   "error: Partition overlap");
+				return -1;
+			}
+
+		}
 
 		librsu_log(HIGH, __func__, "%-16s %016llX - %016llX (%X)",
 			   spt.partition[x].name, spt.partition[x].offset,
 			   (spt.partition[x].offset + spt.partition[x].length -
 			    1), spt.partition[x].flags);
+
 
 		if (strcmp(spt.partition[x].name, "SPT0") == 0)
 			spt0_found = 1;
@@ -234,6 +334,46 @@ static int load_spt0_offset(void)
 	return -1;
 }
 
+static int check_both_spt(void)
+{
+	int ret;
+	char *spt0_data;
+	char *spt1_data;
+
+	spt0_data = (char *)malloc(SPT_SIZE);
+	if (!spt0_data) {
+		librsu_log(LOW, __func__, "failed to allocate spt0_data");
+		return -1;
+	}
+
+	spt1_data = (char *)malloc(SPT_SIZE);
+	if (!spt1_data) {
+		librsu_log(LOW, __func__, "failed to allocate spt1_data");
+		free(spt0_data);
+		return -1;
+	}
+
+	ret = read_dev(SPT0_OFFSET, spt0_data, SPT_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read spt0_data");
+		goto ops_error;
+	}
+
+	ret = read_dev(SPT1_OFFSET, spt1_data, SPT_SIZE);
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to read spt1_data");
+		goto ops_error;
+	}
+
+	ret = memcmp(spt0_data, spt1_data, SPT_SIZE);
+
+ops_error:
+	free(spt1_data);
+	free(spt0_data);
+
+	return ret;
+}
+
 /**
  * Check SPT1 and then SPT0. If they both pass checks, use SPT0.
  * If only one passes, retore the bad one. If both are bad, fail.
@@ -268,8 +408,15 @@ static int load_spt(void)
 			   spt.magic_number);
 	}
 
-	if (spt0_good && spt1_good)
+	if (spt0_good && spt1_good) {
+		if (check_both_spt()) {
+			librsu_log(LOW, __func__,
+				   "error: unmatched SPT0/1 data");
+			spt_corrupted = true;
+			return -1;
+		}
 		return 0;
+	}
 
 	if (spt0_good) {
 		librsu_log(LOW, __func__, "warning: Restoring SPT1");
@@ -330,6 +477,7 @@ static int load_spt(void)
 		return 0;
 	}
 
+	spt_corrupted = true;
 	librsu_log(LOW, __func__, "error: No valid SPT0 or SPT1 found");
 	return -1;
 }
@@ -410,6 +558,75 @@ static int writeback_spt(void)
 	}
 
 	return 0;
+}
+
+static int restore_spt_from_file(char *name)
+{
+	FILE *fp;
+	char *spt_data;
+	__u32 crc_from_saved_file;
+	__u32 calc_crc;
+	__u32 magic_number;
+	int ret;
+
+	fp = fopen(name, "r");
+	if (!fp) {
+		librsu_log(LOW, __func__,
+			   "failed to open file for restoring SPT");
+		return -1;
+	}
+
+	spt_data = (char *)malloc(SPT_SIZE);
+	if (!spt_data) {
+		librsu_log(LOW, __func__, "failed to allocate spt_data");
+		fclose(fp);
+		return -1;
+	}
+
+	ret = fread(spt_data, SPT_SIZE, 1, fp);
+	if (!ret) {
+		librsu_log(LOW, __func__, "failed to read spt_data");
+		ret = -1;
+		goto ops_error;
+	}
+	librsu_log(HIGH, __func__, "read size is %d", ret);
+	calc_crc = crc32(0, (void *)spt_data, SPT_SIZE);
+	fseek(fp, SPT_SIZE, SEEK_SET);
+	ret = fread(&crc_from_saved_file, sizeof(crc_from_saved_file), 1, fp);
+	if (!ret) {
+		librsu_log(LOW, __func__, "failed to read crc_data");
+		ret = -1;
+		goto ops_error;
+	}
+	librsu_log(HIGH, __func__, "read size is %d", ret);
+	fclose(fp);
+
+	if (crc_from_saved_file != calc_crc) {
+		librsu_log(LOW, __func__, "saved file is corrupted");
+		ret = -1;
+		goto ops_error;
+	}
+
+	memcpy(&magic_number, spt_data, sizeof(magic_number));
+	if (magic_number != SPT_MAGIC_NUMBER) {
+		librsu_log(LOW, __func__,
+			   "failure due to mismatch magic number\n");
+		ret = -1;
+		goto ops_error;
+	}
+
+	memcpy(&spt, spt_data, SPT_SIZE);
+	ret = writeback_spt();
+	if (ret) {
+		librsu_log(LOW, __func__, "failed to write back spt\n");
+		goto ops_error;
+	}
+
+	spt_corrupted = false;
+
+ops_error:
+	free(spt_data);
+	return ret;
 }
 
 static union CMF_POINTER_BLOCK cpb;
@@ -894,6 +1111,7 @@ static void ll_close(void)
 	cpb0_part = -1;
 	cpb1_part = -1;
 	cpb_corrupted = false;
+	spt_corrupted = false;
 }
 
 static int partition_count(void)
@@ -1196,6 +1414,10 @@ static struct librsu_ll_intf qspi_ll_intf = {
 	.data.write = data_write,
 	.data.erase = data_erase,
 
+	.spt_ops.restore = restore_spt_from_file,
+	.spt_ops.save = save_spt_to_file,
+	.spt_ops.corrupted = corrupted_spt,
+
 	.cpb_ops.empty = empty_cpb,
 	.cpb_ops.restore = restore_cpb_from_file,
 	.cpb_ops.save = save_cpb_to_file,
@@ -1264,7 +1486,7 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 	if (dev_info.flags & MTD_POWERUP_LOCK)
 		librsu_log(HIGH, __func__, "MTD flash is MTD_POWERUP_LOCK");
 
-	if (load_spt()) {
+	if (load_spt() && !spt_corrupted) {
 		librsu_log(LOW, __func__, "error: Bad SPT");
 		ll_close();
 		return -1;

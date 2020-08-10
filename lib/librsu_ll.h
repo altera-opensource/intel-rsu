@@ -35,6 +35,12 @@ struct librsu_ll_intf {
 	} data;
 
 	struct {
+		int (*restore)(char *name);
+		int (*save)(char *name);
+		int (*corrupted)(void);
+	} spt_ops;
+
+	struct {
 		int (*empty)(void);
 		int (*restore)(char *name);
 		int (*save)(char *name);

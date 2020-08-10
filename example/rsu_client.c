@@ -40,6 +40,8 @@ enum rsu_clinet_command_code {
 	COMMAND_DISPLAY_MAX_RETRY,
 	COMMAND_SLOT_CREATE,
 	COMMAND_SLOT_DELETE,
+	COMMAND_RESTORE_SPT,
+	COMMAND_SAVE_SPT,
 	COMMAND_CREATE_EMPTY_CPB,
 	COMMAND_RESTORE_CPB,
 	COMMAND_SAVE_CPB
@@ -74,6 +76,8 @@ static const struct option opts[] = {
 	{"length", required_argument, NULL, 'L'},
 	{"create-slot", required_argument, NULL, 't'},
 	{"delete-slot", required_argument, NULL, 'd'},
+	{"restore-spt", required_argument, NULL, 'W'},
+	{"save-spt", required_argument, NULL, 'X'},
 	{"create-empty-cpb", no_argument, NULL, 'b'},
 	{"restore-cpb", required_argument, NULL, 'B'},
 	{"save-cpb", required_argument, NULL, 'P'},
@@ -133,6 +137,8 @@ static void rsu_client_usage(void)
 		"create a new slot using unallocated space\n");
 	printf("%-32s  %s", "-d|--delete-slot slot_num",
 		"delete selected slot, freeing up allocated space\n");
+	printf("%-32s  %s", "-W|--restore-spt file_name", "restore spt from a file\n");
+	printf("%-32s  %s", "-X|--save-spt file_name", "save spt to a file\n");
 	printf("%-32s  %s", "-b|--create-empty-cpb", "create a empty cpb\n");
 	printf("%-32s  %s", "-B|--restore-cpb file_name", "restore cpb from a file\n");
 	printf("%-32s  %s", "-P|--save-cpb file_name", "save cpb to a file\n");
@@ -432,7 +438,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:bB:P:S:L:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:W:X:bB:P:S:L:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -609,6 +615,18 @@ int main(int argc, char *argv[])
 			if (*endptr)
 				error_exit("Invalid slot size");
 			break;
+		case 'W':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_RESTORE_SPT;
+			filename = optarg;
+			break;
+		case 'X':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_SAVE_SPT;
+			filename = optarg;
+			break;
 		case 'b':
 			if (command != COMMAND_NONE)
 				error_exit("Only one command allowed");
@@ -781,6 +799,16 @@ int main(int argc, char *argv[])
 		ret = rsu_slot_delete(slot_num);
 		if (ret)
 			error_exit("Failed to delete the slot");
+		break;
+	case COMMAND_RESTORE_SPT:
+		ret = rsu_restore_spt(filename);
+		if (ret)
+			error_exit("Failed to restore spt from a file");
+		break;
+	case COMMAND_SAVE_SPT:
+		ret = rsu_save_spt(filename);
+		if (ret)
+			error_exit("Failed to save spt to a file");
 		break;
 	case COMMAND_CREATE_EMPTY_CPB:
 		ret = rsu_create_empty_cpb();

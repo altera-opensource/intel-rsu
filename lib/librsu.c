@@ -794,3 +794,39 @@ int rsu_max_retry(__u8 *value)
 	*value = (__u8)max_retry;
 	return 0;
 }
+
+/*
+ * rsu_dcmf_status() - retrieve the decision firmware status
+ * @status: pointer to where the status values will be stored
+ *
+ * This function is used to determine whether decision firmware copies are
+ * corrupted in flash, with the currently used decision firmware being used as
+ * reference. The status is an array of 4 values, one for each decision
+ * firmware copy. A 0 means the copy is fine, anything else means the copy is
+ * corrupted.
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_dcmf_status(int *status)
+{
+	__u64 attr_status;
+	int i;
+	char dcmf_str[13] = {'d', 'c', 'm', 'f', '0', '_', 's', 't', 'a', 't',
+			     'u', 's', '\0'};
+
+	for (i = 0; i < 4; i++) {
+		if (librsu_misc_get_devattr(dcmf_str, &attr_status))
+			return -EFILEIO;
+
+		status[i] = (attr_status != 0);
+
+
+		/*
+		 * Advance to next status entry by incrementing the character
+		 * at offset 4, which is initially set to '0'
+		 */
+		dcmf_str[4]++;
+	}
+
+	return 0;
+}

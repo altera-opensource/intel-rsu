@@ -36,6 +36,7 @@ enum rsu_clinet_command_code {
 	COMMAND_CLEAR_ERROR_STATUS,
 	COMMAND_RESET_RETRY_COUNTER,
 	COMMAND_DISPLAY_DCMF_VERSION,
+	COMMAND_DISPLAY_DCMF_STATUS,
 	COMMAND_DISPLAY_MAX_RETRY,
 	COMMAND_SLOT_CREATE,
 	COMMAND_SLOT_DELETE
@@ -64,6 +65,7 @@ static const struct option opts[] = {
 	{"clear-error-status", no_argument, NULL, 'C'},
 	{"reset-retry-counter", no_argument, NULL, 'Z'},
 	{"display-dcmf-version", no_argument, NULL, 'm'},
+	{"display-dcmf-status", no_argument, NULL, 'y'},
 	{"display-max-retry", no_argument, NULL, 'x'},
 	{"address", required_argument, NULL, 'S'},
 	{"length", required_argument, NULL, 'L'},
@@ -117,6 +119,8 @@ static void rsu_client_usage(void)
 		"reset current retry counter\n");
 	printf("%-32s  %s", "-m|--display-dcmf-version",
 	       "print DCMF version\n");
+	printf("%-32s  %s", "-y|--display-dcmf-status",
+	       "print DCMF status\n");
 	printf("%-32s  %s", "-x|--display-max-retry",
 	       "print max_retry parameter\n");
 	printf("%-32s  %s", "-t|--create-slot slot_name -S|--address slot_address -L|--length slot_size",
@@ -348,6 +352,27 @@ static int rsu_client_display_dcmf_version(void)
 }
 
 /*
+ * rsu_client_display_dcmf_status() - display the status of each of the four
+ *				      DCMF copies in flash
+ *
+ * Return: 0 on success, or negative on error
+ */
+static int rsu_client_display_dcmf_status(void)
+{
+	int status[4];
+	int i, ret;
+
+	ret = rsu_dcmf_status(status);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < 4; i++)
+		printf("DCMF%d: %s\n", i, status[i] ? "Corrupted" : "OK");
+
+	return 0;
+}
+
+/*
  * rsu_client_display_max_retry() - display the max_retry parameter
  *
  * Return: 0 on success, or negative on error
@@ -398,7 +423,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmxd:S:L:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:S:L:",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -533,6 +558,11 @@ int main(int argc, char *argv[])
 			if (command != COMMAND_NONE)
 				error_exit("Only one command allowed");
 			command = COMMAND_DISPLAY_DCMF_VERSION;
+			break;
+		case 'y':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_DISPLAY_DCMF_STATUS;
 			break;
 		case 'x':
 			if (command != COMMAND_NONE)
@@ -701,6 +731,11 @@ int main(int argc, char *argv[])
 		ret = rsu_client_display_dcmf_version();
 		if (ret)
 			error_exit("Failed to display the dcmf version");
+		break;
+	case COMMAND_DISPLAY_DCMF_STATUS:
+		ret = rsu_client_display_dcmf_status();
+		if (ret)
+			error_exit("Failed to display the dcmf status");
 		break;
 	case COMMAND_DISPLAY_MAX_RETRY:
 		ret = rsu_client_display_max_retry();

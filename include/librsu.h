@@ -27,6 +27,10 @@
 #define ECORRUPTED_CPB	15
 #define ECORRUPTED_SPT	16
 
+#define STATE_DCIO_CORRUPTED		0xF004D00F
+#define STATE_CPB0_CORRUPTED		0xF004D010
+#define STATE_CPB0_CPB1_CORRUPTED	0xF004D011
+
 /*
  * Macros for extracting version fields
  */

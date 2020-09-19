@@ -7,6 +7,8 @@
 #include "librsu_cfg.h"
 #include "librsu_ll.h"
 #include "librsu_qspi.h"
+#include "librsu_misc.h"
+#include <librsu.h>
 #include <mtd/mtd-user.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -801,6 +803,27 @@ static int load_cpb(void)
 	int cpb0_good = 0;
 	int cpb1_good = 0;
 
+	struct rsu_status_info info;
+	int cpb0_corrupted = 0;
+
+	if (librsu_misc_get_devattr("state", &info.state))
+		return -EFILEIO;
+
+	librsu_log(HIGH, __func__, "state=0x%08X\n", info.state);
+
+	if (info.state == STATE_CPB0_CPB1_CORRUPTED) {
+		librsu_log(LOW, __func__,
+			   "FW detects both CPBs corrupted\n");
+		cpb_corrupted = true;
+		return -ECORRUPTED_CPB;
+	}
+
+	if (info.state == STATE_CPB0_CORRUPTED) {
+		librsu_log(LOW, __func__,
+			   "FW detects corrupted CPB0, fine CPB1\n");
+		cpb0_corrupted = 1;
+	}
+
 	for (x = 0; x < spt.partitions; x++) {
 		if (strcmp(spt.partition[x].name, "CPB0") == 0)
 			cpb0_part = x;
@@ -826,14 +849,16 @@ static int load_cpb(void)
 		librsu_log(MED, __func__, "Bad CPB1 is bad");
 	}
 
-	if (read_part(cpb0_part, 0, &cpb, sizeof(cpb)) == 0 &&
-	    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
-		cpb_slots = (CMF_POINTER *)
-			&cpb.data[cpb.header.image_ptr_offset];
-		if (check_cpb() == 0)
-			cpb0_good = 1;
-	} else {
-		librsu_log(MED, __func__, "Bad CPB0 is bad");
+	if (!cpb0_corrupted) {
+		if (read_part(cpb0_part, 0, &cpb, sizeof(cpb)) == 0 &&
+		    cpb.header.magic_number == CPB_MAGIC_NUMBER) {
+			cpb_slots = (CMF_POINTER *)
+				&cpb.data[cpb.header.image_ptr_offset];
+			if (check_cpb() == 0)
+				cpb0_good = 1;
+		} else {
+			librsu_log(MED, __func__, "Bad CPB0 is bad");
+		}
 	}
 
 	if (cpb0_good && cpb1_good) {

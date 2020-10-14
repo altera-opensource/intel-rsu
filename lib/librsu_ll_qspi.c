@@ -669,7 +669,6 @@ static int restore_spt_from_file(char *name)
 		goto ops_error;
 	}
 	librsu_log(HIGH, __func__, "read size is %d", ret);
-	fclose(fp);
 
 	if (crc_from_saved_file != calc_crc) {
 		librsu_log(LOW, __func__, "saved file is corrupted");
@@ -696,6 +695,7 @@ static int restore_spt_from_file(char *name)
 
 ops_error:
 	free(spt_data);
+	fclose(fp);
 	return ret;
 }
 
@@ -1092,7 +1092,7 @@ static int empty_cpb(void)
 
 	struct cpb_header *c_header;
 
-	c_header = (struct cpb_header *)malloc(sizeof(struct cpb_header));
+	c_header = (struct cpb_header *)calloc(1, sizeof(struct cpb_header));
 	if (!c_header) {
 		librsu_log(LOW, __func__, "failed to allocate cpb_header");
 		return -1;
@@ -1141,6 +1141,7 @@ static int restore_cpb_from_file(char *name)
 	cpb_data = (char *)malloc(CPB_SIZE);
 	if (!cpb_data) {
 		librsu_log(LOW, __func__, "failed to allocate cpb_data");
+		fclose(fp);
 		return -1;
 	}
 
@@ -1161,7 +1162,6 @@ static int restore_cpb_from_file(char *name)
 		goto ops_error;
 	}
 	librsu_log(HIGH, __func__, "read size is %d", ret);
-	fclose(fp);
 
 	if (crc_from_saved_file != calc_crc) {
 		librsu_log(LOW, __func__, "saved file is corrupted");
@@ -1189,6 +1189,7 @@ static int restore_cpb_from_file(char *name)
 
 ops_error:
 	free(cpb_data);
+	fclose(fp);
 	return ret;
 }
 

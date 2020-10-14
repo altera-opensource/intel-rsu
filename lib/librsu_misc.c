@@ -67,56 +67,78 @@ int librsu_misc_slot2part(struct librsu_ll_intf *ll_intf, int slot)
 int librsu_misc_get_devattr(char *attr, __u64 *value)
 {
 	FILE *attr_file;
-	char buf[256];
+	char *buf;
+	int size = 256;
 
-	buf[0] = '\0';
-	strcat(buf, librsu_cfg_get_rsu_dev());
-	strcat(buf, "/");
-	strcat(buf, attr);
+	buf = (char *)calloc(1, size);
+	if (!buf) {
+		librsu_log(LOW, __func__,
+			   "error: failed to alloc buf\n");
+		return -1;
+	}
+
+	strncat(buf, librsu_cfg_get_rsu_dev(),
+		strlen(librsu_cfg_get_rsu_dev()));
+	strncat(buf, "/", sizeof("/"));
+	strncat(buf, attr, strlen(attr));
 
 	attr_file = fopen(buf, "r");
 	if (!attr_file) {
 		librsu_log(LOW, __func__,
 			   "error: Unable to open device attribute file '%s'",
 			   buf);
+		free(buf);
 		return -1;
 	}
 
-	if (fgets(buf, sizeof(buf), attr_file)) {
+	if (fgets(buf, size, attr_file)) {
 		*value = strtol(buf, NULL, 0);
 		fclose(attr_file);
+		free(buf);
 		return 0;
 	}
 
 	fclose(attr_file);
+	free(buf);
 	return -1;
 }
 
 int librsu_misc_put_devattr(char *attr, __u64 value)
 {
 	FILE *attr_file;
-	char buf[256];
+	char *buf;
+	int size = 256;
 
-	buf[0] = '\0';
-	strcat(buf, librsu_cfg_get_rsu_dev());
-	strcat(buf, "/");
-	strcat(buf, attr);
+	buf = (char *)calloc(1, size);
+	if (!buf) {
+		librsu_log(LOW, __func__,
+			   "error: failed to alloc buf\n");
+		return -1;
+	}
+
+	strncat(buf, librsu_cfg_get_rsu_dev(),
+		strlen(librsu_cfg_get_rsu_dev()));
+	strncat(buf, "/", sizeof("/"));
+	strncat(buf, attr, strlen(attr));
 
 	attr_file = fopen(buf, "w");
 	if (!attr_file) {
 		librsu_log(LOW, __func__,
 			   "error: Unable to open device attribute file '%s'",
 			   buf);
+		free(buf);
 		return -1;
 	}
 
-	sprintf(buf, "%lli", value);
+	snprintf(buf, size, "%lli", value);
 
 	if (fputs(buf, attr_file) > 0) {
 		fclose(attr_file);
+		free(buf);
 		return 0;
 	}
 
 	fclose(attr_file);
+	free(buf);
 	return -1;
 }

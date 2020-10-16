@@ -19,6 +19,7 @@ static enum RSU_LL_TYPE roottype = INVALID;
 static char rootpath[128];
 static char rsu_dev[128] = DEFAULT_RSU_DEV;
 static int writeprotect;
+static int spt_checksum_enabled;
 
 void SAFE_STRCPY(char *dst, int dsz, char *src, int ssz)
 {
@@ -60,6 +61,7 @@ void librsu_cfg_reset(void)
 	SAFE_STRCPY(rsu_dev, sizeof(rsu_dev), DEFAULT_RSU_DEV,
 		    sizeof(DEFAULT_RSU_DEV));
 	writeprotect = 0;
+	spt_checksum_enabled = 0;
 }
 
 /*
@@ -222,6 +224,15 @@ int librsu_cfg_parse(FILE *input)
 				return -1;
 			}
 			writeprotect |= (1 << x);
+		} else if (strcmp(argv[0], "rsu-spt-checksum") == 0) {
+			if (argc != 2) {
+				librsu_log(LOW, __func__,
+					   "Wrong number of parameters for '%s' @%i",
+					   argv[0], linenum);
+				return -1;
+			}
+
+			spt_checksum_enabled = strtol(argv[1], NULL, 10);
 		} else {
 			librsu_log(LOW, __func__,
 				   "error: Invalid cfg file option '%s' @%i",
@@ -308,6 +319,14 @@ int librsu_cfg_writeprotected(int slot)
 		return 0;
 
 	if (writeprotect & (1 << slot))
+		return 1;
+
+	return 0;
+}
+
+int librsu_cfg_spt_checksum_enabled(void)
+{
+	if (spt_checksum_enabled)
 		return 1;
 
 	return 0;

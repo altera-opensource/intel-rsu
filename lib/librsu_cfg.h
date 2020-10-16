@@ -27,4 +27,5 @@ char *librsu_cfg_get_rsu_dev(void);
 
 int librsu_cfg_writeprotected(int slot);
 
+int librsu_cfg_spt_checksum_enabled(void);
 #endif

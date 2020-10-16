@@ -15,4 +15,6 @@ int librsu_misc_slot2part(struct librsu_ll_intf *ll_intf, int slot);
 int librsu_misc_get_devattr(char *attr, __u64 *value);
 int librsu_misc_put_devattr(char *attr, __u64 value);
 
+void swap_bits(char *data, int size);
+__u32 swap_endian32(__u32 val);
 #endif

@@ -25,7 +25,8 @@ struct SUB_PARTITION_TABLE {
 	__s32 magic_number;
 	__s32 version;
 	__s32 partitions;
-	__s32 RSVD[5];
+	__s32 checksum;
+	__s32 RSVD[4];
 
 	struct {
 		char name[16];

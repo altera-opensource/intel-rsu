@@ -19,6 +19,8 @@
 #include <zlib.h>
 
 #define SPT_SIZE		4096
+#define SPT_CHECKSUM_OFFSET	0x0C
+
 #define CPB_SIZE		4096
 #define CPB_IMAGE_PTR_OFFSET	24
 #define CPB_IMAGE_PTR_NSLOTS	508
@@ -232,6 +234,8 @@ static int check_spt(void)
 	int x;
 	int y;
 	unsigned int max_len = sizeof(spt.partition[0].name);
+	__u32 calc_crc;
+	char *spt_data;
 
 	int spt0_found = 0;
 	int spt1_found = 0;
@@ -241,13 +245,32 @@ static int check_spt(void)
 	librsu_log(HIGH, __func__, "MAX length of a name = %i bytes",
 		   max_len - 1);
 
-	if (spt.version > SPT_VERSION) {
-		librsu_log(LOW, __func__,
-			   "warning: SPT version %i is greater than %i",
-			   spt.version, SPT_VERSION);
-		librsu_log(LOW, __func__,
-			   "LIBRSU Version %i - update to enable newer features",
-			   LIBRSU_VER);
+	if (spt.version > SPT_VERSION &&
+	    librsu_cfg_spt_checksum_enabled()) {
+		librsu_log(HIGH, __func__,
+			   "check SPT checksum...\n");
+		spt_data = (char *)malloc(SPT_SIZE);
+		if (!spt_data) {
+			librsu_log(LOW, __func__,
+				   "failed to allocate spt_data\n");
+			return -1;
+		}
+
+		memcpy(spt_data, &spt, SPT_SIZE);
+		memset(spt_data + SPT_CHECKSUM_OFFSET,
+		       0, sizeof(spt.checksum));
+
+		/* calculate the checksum */
+		swap_bits(spt_data, SPT_SIZE);
+		calc_crc = crc32(0, (void *)spt_data, SPT_SIZE);
+		if (swap_endian32(spt.checksum) != calc_crc) {
+			librsu_log(LOW, __func__,
+				   "Error, bad SPT checksum\n");
+			free(spt_data);
+			return -1;
+		}
+		swap_bits(spt_data, SPT_SIZE);
+		free(spt_data);
 	}
 
 	if (spt.partitions > SPT_MAX_PARTITIONS) {
@@ -526,6 +549,9 @@ static int writeback_spt(void)
 {
 	int x;
 	int updates = 0;
+	char *spt_data;
+	__u32 calc_crc;
+
 
 	for (x = 0; x < spt.partitions; x++) {
 		if (strcmp(spt.partition[x].name, "SPT0") &&
@@ -538,12 +564,54 @@ static int writeback_spt(void)
 			return -1;
 		}
 
+		if (spt.version > SPT_VERSION &&
+		    librsu_cfg_spt_checksum_enabled()) {
+			librsu_log(MED, __func__,
+				   "update SPT checksum...\n");
+			spt_data = (char *)malloc(SPT_SIZE);
+			if (!spt_data) {
+				librsu_log(LOW, __func__,
+					   "failed to allocate s_data\n");
+				return -1;
+			}
+
+			spt.checksum = (__s32)0xFFFFFFFF;
+			if (write_part(x, SPT_CHECKSUM_OFFSET,
+				       &spt.checksum,
+				       sizeof(spt.checksum))) {
+				librsu_log(LOW, __func__,
+					   "failed to write checksum");
+				free(spt_data);
+				return -1;
+			}
+
+			/* calculate the new checksum */
+			memcpy(spt_data, &spt, SPT_SIZE);
+			memset(spt_data + SPT_CHECKSUM_OFFSET,
+			       0, sizeof(spt.checksum));
+
+			swap_bits(spt_data, SPT_SIZE);
+			calc_crc = crc32(0, (void *)spt_data, SPT_SIZE);
+			spt.checksum = swap_endian32(calc_crc);
+			swap_bits(spt_data, SPT_SIZE);
+			free(spt_data);
+
+			if (write_part(x, SPT_CHECKSUM_OFFSET,
+				       &spt.checksum,
+				       sizeof(spt.checksum))) {
+				librsu_log(LOW, __func__,
+					   "failed to write checksum");
+				return -1;
+			}
+		}
+
 		spt.magic_number = (__s32)0xFFFFFFFF;
 		if (write_part(x, 0, &spt, sizeof(spt))) {
 			librsu_log(LOW, __func__,
 				   "error: Unable to write SPTx table");
 			return -1;
 		}
+
 		spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
 		if (write_part(x, 0, &spt, sizeof(spt.magic_number))) {
 			librsu_log(LOW, __func__,

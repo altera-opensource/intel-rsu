@@ -4,10 +4,11 @@
 
 #include "librsu_cfg.h"
 #include "librsu_image.h"
+#include "librsu_misc.h"
 #include <zlib.h>
 #include <string.h>
 
-static void swap_bits(char *data, int len)
+void swap_bits(char *data, int len)
 {
 	int x, y;
 	char tmp;
@@ -24,7 +25,7 @@ static void swap_bits(char *data, int len)
 	}
 }
 
-static __u32 swap_endian32(__u32 val)
+__u32 swap_endian32(__u32 val)
 {
 	__u32 rtn;
 	char *from = (char *)&val;

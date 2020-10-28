@@ -1586,7 +1586,9 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 		return -1;
 	}
 
-	if (load_cpb() && !cpb_corrupted) {
+	if (spt_corrupted) {
+		cpb_corrupted = true;
+	} else if (load_cpb() && !cpb_corrupted) {
 		librsu_log(LOW, __func__, "error: Bad CPB");
 		ll_close();
 		return -1;

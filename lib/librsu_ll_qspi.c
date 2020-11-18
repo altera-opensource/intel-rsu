@@ -685,6 +685,13 @@ static int restore_spt_from_file(char *name)
 	}
 
 	memcpy(&spt, spt_data, SPT_SIZE);
+
+	if (load_spt0_offset()) {
+		librsu_log(LOW, __func__, "failure to determine SPT0 offset");
+		ret = -1;
+		goto ops_error;
+	}
+
 	ret = writeback_spt();
 	if (ret) {
 		librsu_log(LOW, __func__, "failed to write back spt\n");

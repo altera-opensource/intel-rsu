@@ -1092,6 +1092,13 @@ static int empty_cpb(void)
 
 	struct cpb_header *c_header;
 
+	if (spt_corrupted) {
+		librsu_log(LOW, __func__, "corrupted SPT ---");
+		librsu_log(LOW, __func__,
+			   "run rsu_client restore-spt <file_name> first\n");
+		return -1;
+	}
+
 	c_header = (struct cpb_header *)calloc(1, sizeof(struct cpb_header));
 	if (!c_header) {
 		librsu_log(LOW, __func__, "failed to allocate cpb_header");
@@ -1130,6 +1137,13 @@ static int restore_cpb_from_file(char *name)
 	__u32 calc_crc;
 	__u32 magic_number;
 	int ret;
+
+	if (spt_corrupted) {
+		librsu_log(LOW, __func__, "corrupted SPT ---");
+		librsu_log(LOW, __func__,
+			   "run rsu_client restore-spt <file_name> first\n");
+		return -1;
+	}
 
 	fp = fopen(name, "r");
 	if (!fp) {

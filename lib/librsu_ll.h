@@ -14,6 +14,7 @@ struct librsu_ll_intf {
 		int (*count)(void);
 		char *(*name)(int part_num);
 		__s64 (*offset)(int part_num);
+		__s64 (*factory_offset)(void);
 		int (*size)(int part_num);
 		int (*reserved)(int part_num);
 		int (*readonly)(int part_num);

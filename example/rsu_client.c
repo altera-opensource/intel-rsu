@@ -44,7 +44,8 @@ enum rsu_clinet_command_code {
 	COMMAND_SAVE_SPT,
 	COMMAND_CREATE_EMPTY_CPB,
 	COMMAND_RESTORE_CPB,
-	COMMAND_SAVE_CPB
+	COMMAND_SAVE_CPB,
+	COMMAND_CHECK_RUNNING_FACTORY
 };
 
 static const struct option opts[] = {
@@ -81,6 +82,7 @@ static const struct option opts[] = {
 	{"create-empty-cpb", no_argument, NULL, 'b'},
 	{"restore-cpb", required_argument, NULL, 'B'},
 	{"save-cpb", required_argument, NULL, 'P'},
+	{"check-running-factory", no_argument, NULL, 'k'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -142,6 +144,7 @@ static void rsu_client_usage(void)
 	printf("%-32s  %s", "-b|--create-empty-cpb", "create a empty cpb\n");
 	printf("%-32s  %s", "-B|--restore-cpb file_name", "restore cpb from a file\n");
 	printf("%-32s  %s", "-P|--save-cpb file_name", "save cpb to a file\n");
+	printf("%-32s  %s", "-k|--check-running-factory", "check if currently running the factory image\n");
 	printf("%-32s  %s", "-h|--help", "show usage message\n");
 }
 
@@ -405,6 +408,24 @@ static int rsu_client_display_max_retry(void)
 	return 0;
 }
 
+/*
+ * rsu_client_check_running_factory() - check if running the factory image
+ *
+ * Return: 0 on success, or negative on error
+ */
+static int rsu_client_check_running_factory(void)
+{
+	int factory;
+	int ret;
+
+	ret = rsu_running_factory(&factory);
+	if (ret)
+		return ret;
+
+	printf("Running factory image: %s\n", factory ? "yes" : "no");
+	return 0;
+}
+
 static void error_exit(char *msg)
 {
 	printf("ERROR: %s\n", msg);
@@ -438,7 +459,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt_long(argc, argv,
-				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:W:X:bB:P:S:L:",
+				"cghRl:z:p:t:a:u:A:s:e:v:V:f:r:E:D:n:CZmyxd:W:X:bB:P:S:L:k",
 				opts, &index)) != -1) {
 		switch (c) {
 		case 'c':
@@ -644,6 +665,11 @@ int main(int argc, char *argv[])
 			command = COMMAND_SAVE_CPB;
 			filename = optarg;
 			break;
+		case 'k':
+			if (command != COMMAND_NONE)
+				error_exit("Only one command allowed");
+			command = COMMAND_CHECK_RUNNING_FACTORY;
+			break;
 		case 'h':
 			rsu_client_usage();
 			librsu_exit();
@@ -824,6 +850,11 @@ int main(int argc, char *argv[])
 		ret = rsu_save_cpb(filename);
 		if (ret)
 			error_exit("Failed to save cpb");
+		break;
+	case COMMAND_CHECK_RUNNING_FACTORY:
+		ret = rsu_client_check_running_factory();
+		if (ret)
+			error_exit("Failed to check if running factory image");
 		break;
 	default:
 		error_exit("No command: try -h for help");

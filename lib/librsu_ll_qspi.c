@@ -25,6 +25,8 @@
 #define CPB_IMAGE_PTR_OFFSET	24
 #define CPB_IMAGE_PTR_NSLOTS	508
 
+#define FACTORY_IMAGE_NAME	"FACTORY_IMAGE"
+
 static int dev_file = -1;
 static struct mtd_info_user dev_info;
 
@@ -1250,6 +1252,23 @@ static __s64 partition_offset(int part_num)
 	return spt.partition[part_num].offset;
 }
 
+/*
+ * factory_offset() - get the offset of the factory image
+ *
+ * Return: offset on success, or -1 on error
+ */
+static __s64 factory_offset(void)
+{
+	int x;
+
+	for (x = 0; x < spt.partitions; x++)
+		if (strncmp(spt.partition[x].name, FACTORY_IMAGE_NAME,
+			    sizeof(spt.partition[0].name) - 1) == 0)
+			return spt.partition[x].offset;
+
+	return -1;
+}
+
 static int partition_size(int part_num)
 {
 	if (part_num < 0 || part_num >= spt.partitions)
@@ -1514,6 +1533,7 @@ static struct librsu_ll_intf qspi_ll_intf = {
 	.partition.count = partition_count,
 	.partition.name = partition_name,
 	.partition.offset = partition_offset,
+	.partition.factory_offset = factory_offset,
 	.partition.size = partition_size,
 	.partition.reserved = partition_reserved,
 	.partition.readonly = partition_readonly,

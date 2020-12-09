@@ -1093,3 +1093,30 @@ int rsu_save_cpb(char *filename)
 
 	return ll_intf->cpb_ops.save(filename);
 }
+
+/**
+ * rsu_running_factory() - determine if current running image is factory image
+ * @factory: set to non-zero value when running factory image, zero otherwise
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_running_factory(int *factory)
+{
+	__s64 factory_offset;
+	__u64 current_image;
+
+	if (ll_intf->spt_ops.corrupted()) {
+		rsu_spt_corrupted_info();
+		return -ECORRUPTED_SPT;
+	}
+
+	factory_offset = ll_intf->partition.factory_offset();
+	if (factory_offset < 0)
+		return -ELOWLEVEL;
+
+	if (librsu_misc_get_devattr("current_image", &current_image))
+		return -EFILEIO;
+
+	*factory = ((__u64)factory_offset == current_image);
+	return 0;
+}

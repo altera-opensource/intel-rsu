@@ -478,4 +478,12 @@ int rsu_create_empty_cpb(void);
  * Returns: 0 on success, or error code
  */
 int rsu_restore_cpb(char *name);
+
+/*
+ * rsu_running_factory() - determine if current running image is factory image
+ * @factory: set to non-zero value when running factory image, zero otherwise
+ *
+ * Returns: 0 on success, or error code
+ */
+int rsu_running_factory(int *factory);
 #endif

@@ -29,6 +29,14 @@
 
 static int dev_file = -1;
 static struct mtd_info_user dev_info;
+/*
+ * set to cpb_corrupted flag to true in below case:
+ * 1). reported by firmware
+ * 2). both CPBs are not same
+ */
+static bool cpb_corrupted;
+
+static int load_cpb(void);
 
 static int read_dev(off_t offset, void *buf, int len)
 {
@@ -702,6 +710,12 @@ static int restore_spt_from_file(char *name)
 
 	spt_corrupted = false;
 
+	/* try to reload CPB, as we have a new SPT */
+	cpb_corrupted = false;
+	if (load_cpb() && !cpb_corrupted)
+		librsu_log(LOW, __func__,
+			   "failed to load CPB after restoring SPT\n");
+
 ops_error:
 	free(spt_data);
 	fclose(fp);
@@ -712,13 +726,6 @@ static union CMF_POINTER_BLOCK cpb;
 static CMF_POINTER *cpb_slots;
 static int cpb0_part = -1;
 static int cpb1_part = -1;
-
-/*
- * set to cpb_corrupted flag to true in below case:
- * 1). reported by firmware
- * 2). both CPBs are not same
- */
-static bool cpb_corrupted;
 
 #define ERASED_ENTRY ((__s64)-1)
 #define SPENT_ENTRY ((__s64)0)

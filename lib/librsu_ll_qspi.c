@@ -137,7 +137,7 @@ static int erase_dev(off_t offset, int len)
 	if (len % dev_info.erasesize) {
 		librsu_log(LOW, __func__,
 			   "error: Erase length %i not erase block aligned",
-			   offset);
+			   len);
 		return -1;
 	}
 

@@ -77,10 +77,9 @@ int librsu_misc_get_devattr(char *attr, __u64 *value)
 		return -1;
 	}
 
-	strncat(buf, librsu_cfg_get_rsu_dev(),
-		strlen(librsu_cfg_get_rsu_dev()));
-	strncat(buf, "/", sizeof("/"));
-	strncat(buf, attr, strlen(attr));
+	strncat(buf, librsu_cfg_get_rsu_dev(), size - strlen(buf) - 1);
+	strncat(buf, "/", size - strlen(buf) - 1);
+	strncat(buf, attr, size - strlen(buf) - 1);
 
 	attr_file = fopen(buf, "r");
 	if (!attr_file) {
@@ -116,10 +115,9 @@ int librsu_misc_put_devattr(char *attr, __u64 value)
 		return -1;
 	}
 
-	strncat(buf, librsu_cfg_get_rsu_dev(),
-		strlen(librsu_cfg_get_rsu_dev()));
-	strncat(buf, "/", sizeof("/"));
-	strncat(buf, attr, strlen(attr));
+	strncat(buf, librsu_cfg_get_rsu_dev(), size - strlen(buf) - 1);
+	strncat(buf, "/", size - strlen(buf) - 1);
+	strncat(buf, attr, size - strlen(buf) - 1);
 
 	attr_file = fopen(buf, "w");
 	if (!attr_file) {

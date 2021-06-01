@@ -709,12 +709,6 @@ int rsu_slot_load_after_reboot(int slot)
 
 	offset = ll_intf->partition.offset(part_num);
 
-	if (ll_intf->priority.get(part_num) <= 0) {
-		librsu_log(HIGH, __func__,
-			   "Trying to reboot to an erased slot");
-		return -EERASE;
-	}
-
 	if (librsu_misc_put_devattr("reboot_image", offset))
 		return -EFILEIO;
 

@@ -7,13 +7,6 @@
 
 #include <linux/types.h>
 
-/*
- * Predefined offsets within MTD device node for SPTx tables. By definition,
- * SPT0 it at the start of the MTD device node.
- */
-#define SPT0_OFFSET 0
-#define SPT1_OFFSET (32 * 1024)
-
 #define SPT_MAGIC_NUMBER 0x57713427
 #define SPT_VERSION 0
 #define SPT_FLAG_RESERVED 1

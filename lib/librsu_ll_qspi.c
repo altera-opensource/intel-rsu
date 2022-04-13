@@ -27,6 +27,13 @@
 
 #define FACTORY_IMAGE_NAME	"FACTORY_IMAGE"
 
+/*
+ * Offsets within MTD device node for SPTx tables. By definition,
+ * SPT0 it at the start of the MTD device node.
+ */
+static __u32	spt0_offset;
+static __u32	spt1_offset = 32 * 1024;
+
 static int dev_file = -1;
 static struct mtd_info_user dev_info;
 /*
@@ -156,7 +163,7 @@ static int erase_dev(off_t offset, int len)
 }
 
 static struct SUB_PARTITION_TABLE spt;
-static __u64 spt0_offset;
+static __u64 mtd_part_offset;
 static bool spt_corrupted;
 
 static int save_spt_to_file(char *name)
@@ -181,7 +188,7 @@ static int save_spt_to_file(char *name)
 		return -1;
 	}
 
-	ret = read_dev(SPT0_OFFSET, spt_data, SPT_SIZE);
+	ret = read_dev(spt0_offset, spt_data, SPT_SIZE);
 	if (ret) {
 		librsu_log(LOW, __func__, "failed to read SPT data");
 		goto ops_error;
@@ -224,13 +231,13 @@ static int corrupted_spt(void)
  */
 static int get_part_offset(int part_num, off_t *offset)
 {
-	if (part_num < 0 || part_num >= spt.partitions || spt0_offset == 0)
+	if (part_num < 0 || part_num >= spt.partitions || mtd_part_offset == 0)
 		return -1;
 
-	if (spt.partition[part_num].offset < (__s64)spt0_offset)
+	if (spt.partition[part_num].offset < (__s64)mtd_part_offset)
 		return -1;
 
-	*offset = (off_t)(spt.partition[part_num].offset - spt0_offset);
+	*offset = (off_t)(spt.partition[part_num].offset - mtd_part_offset);
 
 	return 0;
 }
@@ -359,7 +366,7 @@ static int load_spt0_offset(void)
 
 	for (x = 0; x < spt.partitions; x++) {
 		if (strcmp(spt.partition[x].name, "SPT0") == 0) {
-			spt0_offset = spt.partition[x].offset;
+			mtd_part_offset = spt.partition[x].offset;
 			return 0;
 		}
 	}
@@ -388,13 +395,13 @@ static int check_both_spt(void)
 		return -1;
 	}
 
-	ret = read_dev(SPT0_OFFSET, spt0_data, SPT_SIZE);
+	ret = read_dev(spt0_offset, spt0_data, SPT_SIZE);
 	if (ret) {
 		librsu_log(LOW, __func__, "failed to read spt0_data");
 		goto ops_error;
 	}
 
-	ret = read_dev(SPT1_OFFSET, spt1_data, SPT_SIZE);
+	ret = read_dev(spt1_offset, spt1_data, SPT_SIZE);
 	if (ret) {
 		librsu_log(LOW, __func__, "failed to read spt1_data");
 		goto ops_error;
@@ -417,10 +424,10 @@ static int load_spt(void)
 {
 	int spt0_good = 0;
 	int spt1_good = 0;
-	spt0_offset = 0;
+	mtd_part_offset = 0;
 
 	librsu_log(HIGH, __func__, "SPT1");
-	if (read_dev(SPT1_OFFSET, &spt, sizeof(spt)) == 0 &&
+	if (read_dev(spt1_offset, &spt, sizeof(spt)) == 0 &&
 	    spt.magic_number == SPT_MAGIC_NUMBER) {
 		if (check_spt() == 0 && load_spt0_offset() == 0)
 			spt1_good = 1;
@@ -432,7 +439,7 @@ static int load_spt(void)
 	}
 
 	librsu_log(HIGH, __func__, "SPT0");
-	if (read_dev(SPT0_OFFSET, &spt, sizeof(spt)) == 0 &&
+	if (read_dev(spt0_offset, &spt, sizeof(spt)) == 0 &&
 	    spt.magic_number == SPT_MAGIC_NUMBER) {
 		if (check_spt() == 0 && load_spt0_offset() == 0)
 			spt0_good = 1;
@@ -456,21 +463,21 @@ static int load_spt(void)
 	if (spt0_good) {
 		librsu_log(LOW, __func__, "warning: Restoring SPT1");
 
-		if (erase_dev(SPT1_OFFSET, 32 * 1024)) {
+		if (erase_dev(spt1_offset, 32 * 1024)) {
 			librsu_log(LOW, __func__,
 				   "error: Erase SPT1 region failed");
 			return -1;
 		}
 
 		spt.magic_number = (__s32)0xFFFFFFFF;
-		if (write_dev(SPT1_OFFSET, &spt, sizeof(spt))) {
+		if (write_dev(spt1_offset, &spt, sizeof(spt))) {
 			librsu_log(LOW, __func__,
 				   "error: Unable to write SPT1 table");
 			return -1;
 		}
 
 		spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
-		if (write_dev(SPT1_OFFSET, &spt, sizeof(spt.magic_number))) {
+		if (write_dev(spt1_offset, &spt, sizeof(spt.magic_number))) {
 			librsu_log(LOW, __func__,
 				   "error: Unable to wr SPT1 magic #");
 			return -1;
@@ -480,7 +487,7 @@ static int load_spt(void)
 	}
 
 	if (spt1_good) {
-		if (read_dev(SPT1_OFFSET, &spt, sizeof(spt)) ||
+		if (read_dev(spt1_offset, &spt, sizeof(spt)) ||
 		    spt.magic_number != SPT_MAGIC_NUMBER ||
 		    check_spt() || load_spt0_offset()) {
 			librsu_log(MED, __func__, "error: Failed to load SPT1");
@@ -489,21 +496,21 @@ static int load_spt(void)
 
 		librsu_log(LOW, __func__, "warning: Restoring SPT0");
 
-		if (erase_dev(SPT0_OFFSET, 32 * 1024)) {
+		if (erase_dev(spt0_offset, 32 * 1024)) {
 			librsu_log(LOW, __func__,
 				   "error: Erase SPT0 region failed");
 			return -1;
 		}
 
 		spt.magic_number = (__s32)0xFFFFFFFF;
-		if (write_dev(SPT0_OFFSET, &spt, sizeof(spt))) {
+		if (write_dev(spt0_offset, &spt, sizeof(spt))) {
 			librsu_log(LOW, __func__,
 				   "error: Unable to write SPT0 table");
 			return -1;
 		}
 
 		spt.magic_number = (__s32)SPT_MAGIC_NUMBER;
-		if (write_dev(SPT0_OFFSET, &spt, sizeof(spt.magic_number))) {
+		if (write_dev(spt0_offset, &spt, sizeof(spt.magic_number))) {
 			librsu_log(LOW, __func__,
 				   "error: Unable to wr SPT0 magic #");
 			return -1;
@@ -1229,7 +1236,7 @@ static void ll_close(void)
 		close(dev_file);
 
 	dev_file = -1;
-	spt0_offset = 0;
+	mtd_part_offset = 0;
 	spt.partitions = 0;
 	cpb.header.image_ptr_slots = 0;
 	cpb0_part = -1;
@@ -1570,6 +1577,22 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 {
 	char *type_str;
 	char *rootpath = librsu_cfg_get_rootpath();
+	__u64 spt0_address;
+	__u64 spt1_address;
+	int ret;
+
+	ret = librsu_misc_get_devattr("spt0_address", &spt0_address);
+	if (!ret)
+		ret = librsu_misc_get_devattr("spt1_address", &spt1_address);
+
+	if (!ret) {
+		spt1_offset = spt1_address - spt0_address;
+		librsu_log(HIGH, __func__, "spt1_offset calculated: %d",
+			   spt1_offset);
+	} else {
+		librsu_log(HIGH, __func__, "spt1_offset default used: %d",
+			   spt1_offset);
+	}
 
 	if (!rootpath) {
 		librsu_log(LOW, __func__, "error: No root specified");

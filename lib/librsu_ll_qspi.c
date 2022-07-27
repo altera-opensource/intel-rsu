@@ -42,6 +42,7 @@ static struct mtd_info_user dev_info;
  * 2). both CPBs are not same
  */
 static bool cpb_corrupted;
+static bool cpb_fixed;
 
 static int load_cpb(void);
 
@@ -902,14 +903,14 @@ static int load_cpb(void)
 
 	librsu_log(HIGH, __func__, "state=0x%08X\n", info.state);
 
-	if (info.state == STATE_CPB0_CPB1_CORRUPTED) {
+	if (!cpb_fixed && info.state == STATE_CPB0_CPB1_CORRUPTED) {
 		librsu_log(LOW, __func__,
 			   "FW detects both CPBs corrupted\n");
 		cpb_corrupted = true;
 		return -ECORRUPTED_CPB;
 	}
 
-	if (info.state == STATE_CPB0_CORRUPTED) {
+	if (!cpb_fixed && info.state == STATE_CPB0_CORRUPTED) {
 		librsu_log(LOW, __func__,
 			   "FW detects corrupted CPB0, fine CPB1\n");
 		cpb0_corrupted = 1;
@@ -1146,6 +1147,7 @@ static int empty_cpb(void)
 
 	cpb_slots = (CMF_POINTER *)&cpb.data[cpb.header.image_ptr_offset];
 	cpb_corrupted = false;
+	cpb_fixed = true;
 
 ops_error:
 	free(c_header);
@@ -1223,6 +1225,7 @@ static int restore_cpb_from_file(char *name)
 
 	cpb_slots = (CMF_POINTER *)&cpb.data[cpb.header.image_ptr_offset];
 	cpb_corrupted = false;
+	cpb_fixed = true;
 
 ops_error:
 	free(cpb_data);
@@ -1242,6 +1245,7 @@ static void ll_close(void)
 	cpb0_part = -1;
 	cpb1_part = -1;
 	cpb_corrupted = false;
+	cpb_fixed = false;
 	spt_corrupted = false;
 }
 

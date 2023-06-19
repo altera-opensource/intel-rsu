@@ -679,7 +679,13 @@ static int restore_spt_from_file(char *name)
 	}
 	librsu_log(HIGH, __func__, "read size is %d", ret);
 	calc_crc = crc32(0, (void *)spt_data, SPT_SIZE);
-	fseek(fp, SPT_SIZE, SEEK_SET);
+	ret = fseek(fp, SPT_SIZE, SEEK_SET);
+	if (ret != 0) {
+		librsu_log(LOW, __func__, "failed to fseek");
+		ret = -1;
+		goto ops_error;
+	}
+
 	ret = fread(&crc_from_saved_file, sizeof(crc_from_saved_file), 1, fp);
 	if (!ret) {
 		librsu_log(LOW, __func__, "failed to read crc_data");
@@ -1193,7 +1199,13 @@ static int restore_cpb_from_file(char *name)
 
 	librsu_log(HIGH, __func__, "read size is %d", ret);
 	calc_crc = crc32(0, (void *)cpb_data, CPB_SIZE);
-	fseek(fp, CPB_SIZE, SEEK_SET);
+	ret = fseek(fp, CPB_SIZE, SEEK_SET);
+	if (ret != 0) {
+		librsu_log(LOW, __func__, "failed to fseek");
+		ret = -1;
+		goto ops_error;
+	}
+
 	ret = fread(&crc_from_saved_file, sizeof(crc_from_saved_file), 1, fp);
 	if (!ret) {
 		librsu_log(LOW, __func__, "failed to read");

@@ -5,6 +5,10 @@
 #ifndef __LIBRSU_H__
 #define __LIBRSU_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <linux/types.h>
 
 /*
@@ -486,4 +490,8 @@ int rsu_restore_cpb(char *name);
  * Returns: 0 on success, or error code
  */
 int rsu_running_factory(int *factory);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

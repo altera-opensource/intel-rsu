@@ -26,16 +26,19 @@
 #define CPB_IMAGE_PTR_NSLOTS	508
 
 #define FACTORY_IMAGE_NAME	"FACTORY_IMAGE"
-
 /*
  * Offsets within MTD device node for SPTx tables. By definition,
  * SPT0 it at the start of the MTD device node.
  */
 static __u32	spt0_offset;
 static __u32	spt1_offset = 32 * 1024;
+static __u64 spt0_address;
+static __u64 spt1_address;
 
-static int dev_file = -1;
-static struct mtd_info_user dev_info;
+/* data struct ptr for multiflash */
+static struct spi_flash_list *flash_list;
+static struct spi_flash_info *flash_info;
+
 /*
  * set to cpb_corrupted flag to true in below case:
  * 1). reported by firmware
@@ -48,27 +51,74 @@ static int load_cpb(void);
 
 static int read_dev(off_t offset, void *buf, int len)
 {
-	int cnt = 0;
 	char *ptr = buf;
 	int rtn;
+	int cnt = 0;
+	int current_flash = 0;
+	int current_len = 0;
+	int current_offset = 0;
+	int count = 0;
+	int file_ptr = 0;
+	int flash_size = 0;
 
-	if (dev_file < 0)
-		return -1;
+	/* get current flash offset to perform ops */
+	current_offset = offset % flash_list->dev_info[0].size;
+	/* get current flash to perform ops */
+	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
 
-	if (lseek(dev_file, offset, SEEK_SET) != offset)
-		return -1;
+	for (int i = current_flash; i < flash_list->flash_count; i++) {
+		cnt = 0;
+		flash_size = flash_list->dev_info[i].size;
 
-	while (cnt < len) {
-		rtn = read(dev_file, ptr, len - cnt);
+		/* all data has completed */
+		if (count == len)
+			break;
 
-		if (rtn < 0) {
-			librsu_log(LOW, __func__,
-				   "error: Read error (errno=%i)", errno);
-			return -1;
+		/* lseek for second flash should start from offset 0 */
+		if (i > 0) {
+			current_offset = (offset + spt0_address) %
+					 flash_list->dev_info[0].size;
 		}
 
-		cnt += rtn;
-		ptr += rtn;
+		/* get len to write to current flash */
+		if (len + current_offset - count > flash_size) {
+			current_len = flash_size - current_offset;
+		}
+		else {
+			current_len = len - count;
+		}
+
+		if (flash_list->dev_file[i] < 0)
+			return -1;
+
+		file_ptr = flash_list->dev_file[i];
+		if (lseek(file_ptr, current_offset, SEEK_SET) != current_offset)
+			return -1;
+
+		/* loop to run through data in current flash */
+		while (cnt < current_len) {
+			rtn = read(file_ptr, ptr, current_len - cnt);
+
+			if (rtn < 0) {
+				librsu_log(LOW, __func__,
+					   "error: Read error (errno=%i)", errno);
+				return -1;
+			}
+
+			cnt += rtn;
+			ptr += rtn;
+
+			/* check if buf overflow for current ops */
+			if (count + cnt > len) {
+				librsu_log(LOW, __func__,
+					   "error: buf size < length for ops");
+				return -1;
+			}
+		}
+
+		/* set to 0 for new flash and add the current data count */
+		current_offset = 0;
+		count += current_len;
 	}
 
 	return 0;
@@ -76,27 +126,74 @@ static int read_dev(off_t offset, void *buf, int len)
 
 static int write_dev(off_t offset, void *buf, int len)
 {
-	int cnt = 0;
 	char *ptr = buf;
 	int rtn;
+	int cnt = 0;
+	int current_flash = 0;
+	int current_len = 0;
+	int current_offset = 0;
+	int count = 0;
+	int file_ptr = 0;
+	int flash_size = 0;
 
-	if (dev_file < 0)
-		return -1;
+	/* get current flash offset to perform ops */
+	current_offset = offset % flash_list->dev_info[0].size;
+	/* get current flash to perform ops */
+	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
 
-	if (lseek(dev_file, offset, SEEK_SET) != offset)
-		return -1;
+	for (int i = current_flash; i < flash_list->flash_count; i++) {
+		cnt = 0;
+		flash_size = flash_list->dev_info[i].size;
 
-	while (cnt < len) {
-		rtn = write(dev_file, ptr, len - cnt);
+		/* all data has completed */
+		if (count == len)
+			break;
 
-		if (rtn < 0) {
-			librsu_log(LOW, __func__,
-				   "error: Write error (errno=%i)", errno);
-			return -1;
+		/* lseek for second flash should start from offset 0 */
+		if (i > 0) {
+			current_offset = (offset + spt0_address) %
+					 flash_list->dev_info[0].size;
 		}
 
-		cnt += rtn;
-		ptr += rtn;
+		/* get len to write to current flash */
+		if (len + current_offset - count > flash_size) {
+			current_len = flash_size - current_offset;
+		}
+		else {
+			current_len = len - count;
+		}
+
+		if (flash_list->dev_file[i] < 0)
+			return -1;
+
+		file_ptr = flash_list->dev_file[i];
+		if (lseek(file_ptr, current_offset, SEEK_SET) != current_offset)
+			return -1;
+
+		/* loop to run through data in current flash */
+		while (cnt < len) {
+			rtn = write(file_ptr, ptr, current_len - cnt);
+
+			if (rtn < 0) {
+				librsu_log(LOW, __func__,
+					   "error: Write error (errno=%i)", errno);
+				return -1;
+			}
+
+			cnt += rtn;
+			ptr += rtn;
+
+			/* check if buf overflow for current ops */
+			if (count + cnt > len) {
+				librsu_log(LOW, __func__,
+					   "error: buf size < length for ops");
+				return -1;
+			}
+		}
+
+		/* set to 0 for new flash and add the current data count */
+		current_offset = 0;
+		count += current_len;
 	}
 
 	return 0;
@@ -106,12 +203,12 @@ static int write_dev(off_t offset, void *buf, int len)
  * Simulate a flash erase on a datafile by overwriting area with fill data.
  * This is not performed on an MTD device. It is called when erasesize == 0.
  */
-static int erase_with_fill(off_t offset, int len)
+static int erase_with_fill(off_t offset, int len, int dev_file_ptr)
 {
 	char fill[4 * 1024];
 	int cnt;
 
-	if (lseek(dev_file, offset, SEEK_SET) != offset)
+	if (lseek(dev_file_ptr, offset, SEEK_SET) != offset)
 		return -1;
 
 	memset(fill, 0xff, sizeof(fill));
@@ -128,38 +225,76 @@ static int erase_dev(off_t offset, int len)
 {
 	struct erase_info_user erase;
 	int rtn;
+	int current_flash = 0;
+	int current_len = 0;
+	int current_offset = 0;
+	int count = 0;
+	int file_ptr = 0;
+	int flash_size = 0;
 
-	if (dev_file < 0)
-		return -1;
+	/* get current flash offset to perform ops */
+	current_offset = offset % flash_list->dev_info[0].size;
+	/* get current flash to perform ops */
+	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
 
-	if (dev_info.erasesize == 0)
-		return erase_with_fill(offset, len);
+	for (int i = current_flash; i < flash_list->flash_count; i++) {
+		flash_size = flash_list->dev_info[i].size;
 
-	if (offset % dev_info.erasesize) {
-		librsu_log(LOW, __func__,
+		/* all data has completed */
+		if (count == len)
+			break;
+
+		/* lseek for second flash should start from offset 0 */
+		if (i > 0) {
+			current_offset = (offset + spt0_address) %
+					 flash_list->dev_info[0].size;
+		}
+
+		/* get len to write to current flash */
+		if (len + current_offset - count > flash_size) {
+			current_len = flash_size - current_offset;
+		}
+		else {
+			current_len = len - count;
+		}
+
+		if (flash_list->dev_file[i] < 0)
+			return -1;
+
+		file_ptr = flash_list->dev_file[i];
+
+		if (flash_list->dev_info[i].erasesize == 0)
+			return erase_with_fill(current_offset, current_len, file_ptr);
+
+		if (current_offset % flash_list->dev_info[i].erasesize) {
+			librsu_log(LOW, __func__,
 			   "error: Erase offset 0x08%x not erase block aligned",
-			   offset);
-		return -1;
+			   current_offset);
+			return -1;
+		}
+
+		if (current_len % flash_list->dev_info[i].erasesize) {
+			librsu_log(LOW, __func__,
+				   "error: Erase length %i not erase block aligned",
+				   current_len);
+			return -1;
+		}
+
+		erase.start = current_offset;
+		erase.length = current_len;
+
+		rtn = ioctl(flash_list->dev_file[i], MEMERASE, &erase);
+
+		if (rtn < 0) {
+			librsu_log(LOW, __func__, "error: Erase error (errno=%i)",
+					   errno);
+			return -1;
+		}
+
+		/* set to 0 for new flash and add the current data count */
+		current_offset = 0;
+		count += current_len;
 	}
-
-	if (len % dev_info.erasesize) {
-		librsu_log(LOW, __func__,
-			   "error: Erase length %i not erase block aligned",
-			   len);
-		return -1;
-	}
-
-	erase.start = offset;
-	erase.length = len;
-
-	rtn = ioctl(dev_file, MEMERASE, &erase);
-
-	if (rtn < 0) {
-		librsu_log(LOW, __func__, "error: Erase error (errno=%i)",
-			   errno);
-		return -1;
-	}
-
 	return 0;
 }
 
@@ -1247,10 +1382,16 @@ ops_error:
 
 static void ll_close(void)
 {
-	if (dev_file >= 0)
-		close(dev_file);
+	/* close the dev */
+	for (int i = 0; i < flash_list->flash_count; i++) {
+		if (flash_list->dev_file[i] >= 0)
+			close(flash_list->dev_file[i]);
+		flash_list->dev_file[i] = -1;
 
-	dev_file = -1;
+		if (!flash_info->root_path[i])
+			free(flash_info->root_path[i]);
+	}
+
 	mtd_part_offset = 0;
 	spt.partitions = 0;
 	cpb.header.image_ptr_slots = 0;
@@ -1496,12 +1637,13 @@ static int partition_create(char *name, __u64 start, unsigned int size)
 	int x;
 	__u64 end = start + size;
 
-	if (size % dev_info.erasesize) {
+	/* get erasesize from flash 0 since all flash are similar */
+	if (size % flash_list->dev_info[0].erasesize) {
 		librsu_log(LOW, __func__, "error: Invalid partition size");
 		return -1;
 	}
 
-	if (start % dev_info.erasesize) {
+	if (start % flash_list->dev_info[0].erasesize) {
 		librsu_log(LOW, __func__, "error: Invalid partition address");
 		return -1;
 	}
@@ -1592,10 +1734,22 @@ static struct librsu_ll_intf qspi_ll_intf = {
 int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 {
 	char *type_str;
-	char *rootpath = librsu_cfg_get_rootpath();
-	__u64 spt0_address;
-	__u64 spt1_address;
 	int ret;
+	int flash_count;
+
+	/* data struct ptr for multiflash */
+	flash_list = &qspi_ll_intf.flash_list;
+	flash_info = &qspi_ll_intf.flash_info;
+
+	/* retrieve multiple mtd path from cfg */
+	flash_count = librsu_cfg_get_rootpath(flash_info);
+	if (!flash_count) {
+		librsu_log(LOW, __func__, "error: get_flash_info error.");
+		return -1;
+	}
+
+	/* init flash count */
+	flash_list->flash_count = flash_count;
 
 	ret = librsu_misc_get_devattr("spt0_address", &spt0_address);
 	if (!ret)
@@ -1610,62 +1764,78 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
 			   spt1_offset);
 	}
 
-	if (!rootpath) {
+	if (!flash_info) {
 		librsu_log(LOW, __func__, "error: No root specified");
 		return -1;
+	} else {
+		for (int i = 0; i < flash_list->flash_count; i++) {
+			if (flash_info->root_path[i])
+				librsu_log(HIGH, __func__, "flash_info[%d]: %s\n", i,
+						   flash_info->root_path[i]);
+			else
+				librsu_log(HIGH, __func__, "flash_info[%d]: Empty\n", i);
+		}
 	}
 
-	dev_file = open(rootpath, O_RDWR | O_SYNC);
+	/* open the mtd dev from cfg, 1 mtd = 1 flash */
+	for (int i = 0; i < flash_list->flash_count; i++) {
+		flash_list->dev_file[i] = open(flash_info->root_path[i],
+					       O_RDWR | O_SYNC);
 
-	if (dev_file < 0) {
-		librsu_log(LOW, __func__, "error: Unable to open '%s'",
-			   rootpath);
-		return -1;
+		if (flash_list->dev_file[i] < 0) {
+			librsu_log(LOW, __func__, "error: Unable to open '%s'",
+				   flash_info->root_path[i]);
+			/* free the opened dev_file */
+			ll_close();
+			return -1;
+		}
+
+		if (ioctl(flash_list->dev_file[i], MEMGETINFO,
+			  &flash_list->dev_info[i])) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to find mtd info for '%s'",
+				   flash_info->root_path[i]);
+			ll_close();
+			return -1;
+		}
+
+		if (flash_list->dev_info[i].type == MTD_NORFLASH)
+			type_str = "NORFLASH";
+		else if (flash_list->dev_info[i].type == MTD_NANDFLASH)
+			type_str = "NANDFLASH";
+		else if (flash_list->dev_info[i].type == MTD_RAM)
+			type_str = "RAM";
+		else if (flash_list->dev_info[i].type == MTD_ROM)
+			type_str = "ROM";
+		else if (flash_list->dev_info[i].type == MTD_DATAFLASH)
+			type_str = "DATAFLASH";
+		else if (flash_list->dev_info[i].type == MTD_UBIVOLUME)
+			type_str = "UBIVOLUME";
+		else
+			type_str = "[UNKNOWN]";
+
+		librsu_log(HIGH, __func__, "MTD flash type is (%i) %s",
+			   flash_list->dev_info[i].type, type_str);
+		librsu_log(HIGH, __func__, "MTD flash size = %i",
+			   flash_list->dev_info[i].size);
+		librsu_log(HIGH, __func__, "MTD flash erase size = %i",
+			   flash_list->dev_info[i].erasesize);
+		librsu_log(HIGH, __func__, "MTD flash write size = %i",
+			   flash_list->dev_info[i].writesize);
+
+		if (flash_list->dev_info[i].flags & MTD_WRITEABLE)
+			librsu_log(HIGH, __func__, "MTD flash is MTD_WRITEABLE");
+
+		if (flash_list->dev_info[i].flags & MTD_BIT_WRITEABLE)
+			librsu_log(HIGH, __func__,
+				   "MTD flash is MTD_BIT_WRITEABLE");
+
+		if (flash_list->dev_info[i].flags & MTD_NO_ERASE)
+			librsu_log(HIGH, __func__, "MTD flash is MTD_NO_ERASE");
+
+		if (flash_list->dev_info[i].flags & MTD_POWERUP_LOCK)
+			librsu_log(HIGH, __func__, "MTD flash is MTD_POWERUP_LOCK");
 	}
-
-	if (ioctl(dev_file, MEMGETINFO, &dev_info)) {
-		librsu_log(LOW, __func__,
-			   "error: Unable to find mtd info for '%s'",
-			   librsu_cfg_get_rootpath());
-		ll_close();
-		return -1;
-	}
-
-	if (dev_info.type == MTD_NORFLASH)
-		type_str = "NORFLASH";
-	else if (dev_info.type == MTD_NANDFLASH)
-		type_str = "NANDFLASH";
-	else if (dev_info.type == MTD_RAM)
-		type_str = "RAM";
-	else if (dev_info.type == MTD_ROM)
-		type_str = "ROM";
-	else if (dev_info.type == MTD_DATAFLASH)
-		type_str = "DATAFLASH";
-	else if (dev_info.type == MTD_UBIVOLUME)
-		type_str = "UBIVOLUME";
-	else
-		type_str = "[UNKNOWN]";
-
-	librsu_log(HIGH, __func__, "MTD flash type is (%i) %s",
-		   dev_info.type, type_str);
-	librsu_log(HIGH, __func__, "MTD flash size = %i", dev_info.size);
-	librsu_log(HIGH, __func__, "MTD flash erase size = %i",
-		   dev_info.erasesize);
-	librsu_log(HIGH, __func__, "MTD flash write size = %i",
-		   dev_info.writesize);
-
-	if (dev_info.flags & MTD_WRITEABLE)
-		librsu_log(HIGH, __func__, "MTD flash is MTD_WRITEABLE");
-
-	if (dev_info.flags & MTD_BIT_WRITEABLE)
-		librsu_log(HIGH, __func__,
-			   "MTD flash is MTD_BIT_WRITEABLE");
-
-	if (dev_info.flags & MTD_NO_ERASE)
-		librsu_log(HIGH, __func__, "MTD flash is MTD_NO_ERASE");
-
-	if (dev_info.flags & MTD_POWERUP_LOCK)
-		librsu_log(HIGH, __func__, "MTD flash is MTD_POWERUP_LOCK");
 
 	if (load_spt() && !spt_corrupted) {
 		librsu_log(LOW, __func__, "error: Bad SPT");
@@ -1692,36 +1862,65 @@ int librsu_ll_open_qspi(struct librsu_ll_intf **intf)
  */
 int librsu_ll_open_datafile(struct librsu_ll_intf **intf)
 {
-	char *rootpath = librsu_cfg_get_rootpath();
+	int flash_count;
 
-	if (!rootpath) {
+	/* data struct ptr for multiflash */
+	flash_list = &qspi_ll_intf.flash_list;
+	flash_info = &qspi_ll_intf.flash_info;
+
+	/* retrieve multiple mtd path from cfg */
+	flash_count = librsu_cfg_get_rootpath(flash_info);
+	if (flash_count) {
+		librsu_log(LOW, __func__, "error: get_rootpath error.");
+		return -1;
+	}
+
+	/* init flash count */
+	flash_list->flash_count = flash_count;
+
+	if (!flash_info) {
 		librsu_log(LOW, __func__, "error: No root specified");
 		return -1;
+	} else {
+		for (int i = 0; i < flash_list->flash_count; i++) {
+			if (flash_info->root_path[i])
+				librsu_log(HIGH, __func__, "flash_info[%d]: %s\n", i,
+						   flash_info->root_path[i]);
+			else
+				librsu_log(HIGH, __func__, "flash_info[%d]: Empty\n", i);
+		}
 	}
 
-	dev_file = open(rootpath, O_RDWR | O_SYNC);
+	/* open the mtd dev from cfg, 1 mtd = 1 flash */
+	for (int i = 0; i < flash_list->flash_count; i++) {
+		flash_list->dev_file[i] = open(flash_info->root_path[i],
+					       O_RDWR | O_SYNC);
 
-	if (dev_file < 0) {
-		librsu_log(LOW, __func__,
-			   "error: Unable to open dev_file '%s'", rootpath);
-		return -1;
+		if (flash_list->dev_file[i] < 0) {
+			librsu_log(LOW, __func__,
+				   "error: Unable to open dev_file '%s'",
+					flash_info->root_path[i]);
+			/* free the opened dev_file */
+			ll_close();
+			return -1;
+		}
+
+		flash_list->dev_info[i].type = MTD_ABSENT;
+		flash_list->dev_info[i].erasesize = 0;
+		flash_list->dev_info[i].writesize = 1;
+		flash_list->dev_info[i].oobsize = 0;
 	}
-
-	dev_info.type = MTD_ABSENT;
-	dev_info.erasesize = 0;
-	dev_info.writesize = 1;
-	dev_info.oobsize = 0;
 
 	if (load_spt()) {
 		librsu_log(LOW, __func__, "error: Bad SPT in dev_file '%s'",
-			   librsu_cfg_get_rootpath());
+			   flash_info->root_path[0]);
 		ll_close();
 		return -1;
 	}
 
 	if (load_cpb()) {
 		librsu_log(LOW, __func__, "error: Bad CPB in dev_file '%s'",
-			   librsu_cfg_get_rootpath());
+			   flash_info->root_path[0]);
 		ll_close();
 		return -1;
 	}

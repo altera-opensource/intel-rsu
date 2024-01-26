@@ -6,6 +6,22 @@
 #define __LIBRSU_LL_H__
 
 #include <linux/types.h>
+#include <mtd/mtd-user.h>
+
+/* Maximum number of QSPI flash supported */
+#define QSPI_MAX_DEVICE 4
+
+/* struct for multiflash */
+struct spi_flash_list {
+	int dev_file[QSPI_MAX_DEVICE];
+	struct mtd_info_user dev_info[QSPI_MAX_DEVICE];
+	int flash_count;
+};
+
+struct spi_flash_info {
+	int flash_index[QSPI_MAX_DEVICE];
+	char *root_path[QSPI_MAX_DEVICE];
+};
 
 struct librsu_ll_intf {
 	void (*close)(void);
@@ -47,6 +63,9 @@ struct librsu_ll_intf {
 		int (*save)(char *name);
 		int (*corrupted)(void);
 	} cpb_ops;
+
+	struct spi_flash_list flash_list;
+	struct spi_flash_info flash_info;
 };
 
 int librsu_ll_open_datafile(struct librsu_ll_intf **intf);

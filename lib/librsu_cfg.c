@@ -16,10 +16,12 @@ static enum RSU_LOG_LEVEL loglevel = LOW;
 static FILE *logfile;
 
 static enum RSU_LL_TYPE roottype = INVALID;
+static char *parsed_rootpath[QSPI_MAX_DEVICE];
 static char rootpath[128];
 static char rsu_dev[128] = DEFAULT_RSU_DEV;
 static int writeprotect;
 static int spt_checksum_enabled;
+static int total_num_flash_devices = 0;
 
 void SAFE_STRCPY(char *dst, int dsz, char *src, int ssz)
 {
@@ -62,6 +64,11 @@ void librsu_cfg_reset(void)
 		    sizeof(DEFAULT_RSU_DEV));
 	writeprotect = 0;
 	spt_checksum_enabled = 0;
+
+	/* free the memory for rsu multiflash rootpath */
+	for (int i = 0; i < QSPI_MAX_DEVICE; i++) {
+		free(parsed_rootpath[i]);
+	}
 }
 
 /*
@@ -149,8 +156,7 @@ int librsu_cfg_parse(FILE *input)
 				return -1;
 			}
 
-			SAFE_STRCPY(rootpath, sizeof(rootpath), argv[2],
-				    sizeof(rootpath));
+			librsu_cfg_parse_rootpath(argv[2]);
 		} else if (strcmp(argv[0], "rsu-dev") == 0) {
 			if (argc != 2) {
 				librsu_log(LOW, __func__,
@@ -297,12 +303,53 @@ enum RSU_LL_TYPE librsu_cfg_get_roottype(void)
 	return roottype;
 }
 
-char *librsu_cfg_get_rootpath(void)
+void librsu_cfg_parse_rootpath(char *rootpath)
 {
+	char *token;
+	char *delimiter = ",";
+
+	if (!rootpath) {
+		librsu_log(LOW, __func__, "error: rootpath is NULL. Exiting.");
+		return;
+	}
+
+	/* allocate tmp string for parsing */
+	char *tmp = strdup(rootpath);
+
+	/* get first mtd token */
+	token = strtok(tmp, delimiter);
+
+	/* parse other mtds */
+	while(token != NULL && total_num_flash_devices < QSPI_MAX_DEVICE) {
+		parsed_rootpath[total_num_flash_devices] = strdup(token);
+		if (!parsed_rootpath[total_num_flash_devices]) {
+			/* free tmp string */
+			free(tmp);
+			librsu_log(LOW, __func__, "error: token is NULL. Exiting.");
+			return;
+		}
+
+		token = strtok(NULL, delimiter);
+		total_num_flash_devices++;
+	}
+
+	/* free tmp string */
+	free(tmp);
+}
+
+int librsu_cfg_get_rootpath(struct spi_flash_info *flash_info)
+{
+	/* retrieve the rootpath from parsed mtd */
+	for (int i = 0; i < total_num_flash_devices; i++) {
+		flash_info->root_path[i] = strdup(parsed_rootpath[i]);
+		flash_info->flash_index[i] = i;
+	}
+
+	/* return the num of flash */
 	if (roottype != 0)
-		return rootpath;
+		return total_num_flash_devices;
 	else
-		return NULL;
+		return 0;
 }
 
 char *librsu_cfg_get_rsu_dev(void)

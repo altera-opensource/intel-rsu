@@ -5,7 +5,9 @@
 #ifndef __LIBRSU_CFG_H__
 #define __LIBRSU_CFG_H__
 
+#include <stdbool.h>
 #include <stdio.h>
+#include "librsu_ll.h"
 
 void SAFE_STRCPY(char *dst, int dsz, char *src, int ssz);
 
@@ -21,7 +23,9 @@ enum RSU_LL_TYPE { INVALID = 0, DATAFILE, QSPI, NAND, SDMMC };
 
 enum RSU_LL_TYPE librsu_cfg_get_roottype(void);
 
-char *librsu_cfg_get_rootpath(void);
+int librsu_cfg_get_rootpath(struct spi_flash_info *flash_info);
+
+void librsu_cfg_parse_rootpath(char *rootpath);
 
 char *librsu_cfg_get_rsu_dev(void);
 

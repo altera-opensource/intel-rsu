@@ -284,7 +284,7 @@ int librsu_image_block_init(struct rsu_image_state *state)
 {
 	librsu_log(HIGH, __func__, "Resetting image block state machine.");
 
-	state->no_sections = 1;
+	state->no_sections = 0;
 	add_section(state, 0);
 	state->block_type = REGULAR_BLOCK;
 	state->absolute = 0;

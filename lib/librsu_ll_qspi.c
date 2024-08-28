@@ -49,6 +49,26 @@ static bool cpb_fixed;
 
 static int load_cpb(void);
 
+static int get_current_flash_offset(off_t offset, int *current_flash, int *current_offset)
+{
+	if (!current_flash || !current_offset)
+		return -1;
+
+	if (offset >= flash_list->dev_info[0].size) {
+		/* get current flash offset to perform ops */
+		*current_offset = ((offset + spt0_address) % (flash_list->dev_info[0].size + spt0_address));
+		/* get current flash to perform ops */
+		*current_flash = (offset + spt0_address) / (flash_list->dev_info[0].size + spt0_address);
+	}
+	else
+	{
+		*current_offset = offset;
+		*current_flash = 0;
+	}
+
+	return 0;
+}
+
 static int read_dev(off_t offset, void *buf, int len)
 {
 	char *ptr = buf;
@@ -61,10 +81,9 @@ static int read_dev(off_t offset, void *buf, int len)
 	int file_ptr = 0;
 	int flash_size = 0;
 
-	/* get current flash offset to perform ops */
-	current_offset = offset % flash_list->dev_info[0].size;
-	/* get current flash to perform ops */
-	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
+	rtn = get_current_flash_offset(offset, &current_flash, &current_offset);
+	if (rtn)
+		return rtn;
 
 	for (int i = current_flash; i < flash_list->flash_count; i++) {
 		cnt = 0;
@@ -73,12 +92,6 @@ static int read_dev(off_t offset, void *buf, int len)
 		/* all data has completed */
 		if (count == len)
 			break;
-
-		/* lseek for second flash should start from offset 0 */
-		if (i > 0) {
-			current_offset = (offset + spt0_address) %
-					 flash_list->dev_info[0].size;
-		}
 
 		/* get len to write to current flash */
 		if (len + current_offset - count > flash_size) {
@@ -136,10 +149,9 @@ static int write_dev(off_t offset, void *buf, int len)
 	int file_ptr = 0;
 	int flash_size = 0;
 
-	/* get current flash offset to perform ops */
-	current_offset = offset % flash_list->dev_info[0].size;
-	/* get current flash to perform ops */
-	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
+	rtn = get_current_flash_offset(offset, &current_flash, &current_offset);
+	if (rtn)
+		return rtn;
 
 	for (int i = current_flash; i < flash_list->flash_count; i++) {
 		cnt = 0;
@@ -148,12 +160,6 @@ static int write_dev(off_t offset, void *buf, int len)
 		/* all data has completed */
 		if (count == len)
 			break;
-
-		/* lseek for second flash should start from offset 0 */
-		if (i > 0) {
-			current_offset = (offset + spt0_address) %
-					 flash_list->dev_info[0].size;
-		}
 
 		/* get len to write to current flash */
 		if (len + current_offset - count > flash_size) {
@@ -232,10 +238,9 @@ static int erase_dev(off_t offset, int len)
 	int file_ptr = 0;
 	int flash_size = 0;
 
-	/* get current flash offset to perform ops */
-	current_offset = offset % flash_list->dev_info[0].size;
-	/* get current flash to perform ops */
-	current_flash = (offset + spt0_address) / flash_list->dev_info[0].size;
+	rtn = get_current_flash_offset(offset, &current_flash, &current_offset);
+	if (rtn)
+		return rtn;
 
 	for (int i = current_flash; i < flash_list->flash_count; i++) {
 		flash_size = flash_list->dev_info[i].size;
@@ -243,12 +248,6 @@ static int erase_dev(off_t offset, int len)
 		/* all data has completed */
 		if (count == len)
 			break;
-
-		/* lseek for second flash should start from offset 0 */
-		if (i > 0) {
-			current_offset = (offset + spt0_address) %
-					 flash_list->dev_info[0].size;
-		}
 
 		/* get len to write to current flash */
 		if (len + current_offset - count > flash_size) {

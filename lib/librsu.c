@@ -540,11 +540,6 @@ int rsu_slot_copy_to_file(int slot, char *filename)
 		return -ECORRUPTED_CPB;
 	}
 
-	if (ll_intf->priority.get(part_num) <= 0) {
-		librsu_log(HIGH, __func__, "Trying to read an erased slot");
-		return -EERASE;
-	}
-
 	df = open(filename, O_WRONLY | O_CREAT, 0600);
 	if (df < 0) {
 		librsu_log(HIGH, __func__,
